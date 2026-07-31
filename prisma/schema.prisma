@@ -1,0 +1,116 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum StatusAgendamento {
+  agendado
+  concluido
+  cancelado
+  faltou
+}
+
+enum StatusProposta {
+  pendente
+  confirmada
+  recusada
+}
+
+enum SerieEstado {
+  ativa
+  bloqueada
+  cancelada
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+}
+
+model Cliente {
+  id          String        @id @default(cuid())
+  nome        String
+  telefone    String
+  email       String?
+  notas       String?
+  createdAt   DateTime      @default(now())
+  agendamentos Agendamento[]
+  series      SerieRecorrente[]
+}
+
+model Servico {
+  id          String        @id @default(cuid())
+  nome        String
+  precoCents  Int
+  duracaoMin  Int
+  ativo       Boolean       @default(true)
+  agendamentos Agendamento[]
+  series      SerieRecorrente[]
+}
+
+model Agendamento {
+  id                   String            @id @default(cuid())
+  clienteId            String
+  servicoId            String
+  dataHora             DateTime
+  status               StatusAgendamento @default(agendado)
+  precoCobrado         Int
+  notas                String?
+  criadoEm             DateTime          @default(now())
+  novaDataHoraProposta DateTime?
+  tokenProposta        String?           @unique
+  propostaStatus       StatusProposta?
+  propostaExpiraEm     DateTime?
+  serieId              String?
+  lembreteEnviadoEm    DateTime?
+  cliente              Cliente           @relation(fields: [clienteId], references: [id])
+  servico              Servico           @relation(fields: [servicoId], references: [id])
+  serie                SerieRecorrente?  @relation(fields: [serieId], references: [id], onDelete: SetNull)
+
+  @@index([dataHora])
+  @@index([clienteId])
+  @@index([servicoId])
+  @@index([serieId])
+}
+
+model SerieRecorrente {
+  id               String       @id @default(cuid())
+  clienteId        String
+  servicoId        String
+  diaDaSemana      Int
+  hora             String
+  intervaloSemanas Int          @default(1)
+  dataInicio       DateTime
+  estado           SerieEstado  @default(ativa)
+  motivoBloqueio   String?
+  bloqueadaEm      DateTime?
+  canceladaEm      DateTime?
+  criadaEm         DateTime     @default(now())
+  cliente          Cliente      @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  servico          Servico      @relation(fields: [servicoId], references: [id], onDelete: Restrict)
+  agendamentos     Agendamento[]
+
+  @@index([clienteId])
+  @@index([servicoId])
+  @@index([estado])
+}
+
+model HorarioFuncionamento {
+  id          String  @id @default(cuid())
+  diaDaSemana Int     @unique
+  aberto      Boolean @default(false)
+  abertura    String?
+  fecho       String?
+}
+
+model DiaFechado {
+  id     String   @id @default(cuid())
+  data   DateTime @unique @db.Date
+  motivo String?
+}
