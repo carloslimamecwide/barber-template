@@ -68,6 +68,13 @@ jobs:
           BARBER_PASSWORD=${{ secrets.BARBER_PASSWORD }}
           EOF
 
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Pull latest image
         run: docker compose pull app
 
