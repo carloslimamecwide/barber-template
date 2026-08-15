@@ -1,0 +1,26 @@
+# Dependencias
+node_modules
+npm-debug.log
+
+# Build
+.next
+
+# Ambiente
+.env
+.env.*
+!.env.example
+
+# Git & CI
+.git
+.github
+
+# Docker
+Dockerfile
+docker-compose.yml
+
+# Dev
+.vscode
+coverage
+
+# Docs
+*.md
