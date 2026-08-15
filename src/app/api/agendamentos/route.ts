@@ -6,6 +6,7 @@ import { toDateInputValue } from "@/lib/format";
 import { slotLivre, obterHorarioDoDia } from "@/lib/disponibilidade";
 import { agendamentoPublicoSchema } from "@/lib/validations";
 import { enviarEmailConfirmacao } from "@/lib/email";
+import { randomUUID } from "node:crypto";
 
 export async function GET(request: Request) {
   if (!(await requireAuth())) {
@@ -13,14 +14,16 @@ export async function GET(request: Request) {
   }
   const { searchParams } = new URL(request.url);
   const data = searchParams.get("data") ?? toDateInputValue(new Date());
+  const profissionalId = searchParams.get("profissionalId") || undefined;
   const agendamentos = await prisma.agendamento.findMany({
     where: {
       dataHora: {
         gte: combineDateAndTime(data, "00:00"),
         lte: combineDateAndTime(data, "23:59"),
       },
+      ...(profissionalId ? { profissionalId } : {}),
     },
-    include: { cliente: true, servico: true, serie: { select: { id: true } } },
+    include: { cliente: true, servico: true, profissional: true, serie: { select: { id: true } } },
     orderBy: { dataHora: "asc" },
   });
   return NextResponse.json(agendamentos);
@@ -35,7 +38,7 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   }
-  const { servicoId, data, hora, cliente } = parsed.data;
+  const { servicoId, profissionalId, data, hora, cliente } = parsed.data;
 
   const servico = await prisma.servico.findUnique({ where: { id: servicoId } });
   if (!servico || !servico.ativo) {
@@ -53,8 +56,28 @@ export async function POST(request: Request) {
     );
   }
 
-  const livre = await slotLivre(data, hora, servico.duracaoMin);
-  if (!livre) {
+  const profissionais = await prisma.profissional.findMany({ where: { ativo: true }, orderBy: [{ ordem: "asc" }, { nome: "asc" }] });
+  const candidatos = profissionalId
+    ? profissionais.filter((p) => p.id === profissionalId)
+    : profissionais;
+  if (profissionalId && candidatos.length === 0) {
+    return NextResponse.json({ error: "Profissional não encontrado" }, { status: 404 });
+  }
+  let profissionalEscolhido: (typeof candidatos)[number] | undefined = candidatos[0];
+  let slotDisponivel = false;
+  if (candidatos.length > 0) {
+    profissionalEscolhido = undefined;
+    for (const candidato of candidatos) {
+      if (await slotLivre(data, hora, servico.duracaoMin, undefined, candidato.id)) {
+        profissionalEscolhido = candidato;
+        slotDisponivel = true;
+        break;
+      }
+    }
+  } else {
+    slotDisponivel = await slotLivre(data, hora, servico.duracaoMin);
+  }
+  if (!slotDisponivel) {
     return NextResponse.json(
       { error: "Esta hora já não está disponível" },
       { status: 409 },
@@ -83,9 +106,12 @@ export async function POST(request: Request) {
     data: {
       clienteId: clienteReg.id,
       servicoId: servico.id,
+      profissionalId: profissionalEscolhido?.id,
       dataHora: combineDateAndTime(data, hora),
       status: "agendado",
       precoCobrado: servico.precoCents,
+      tokenGestao: randomUUID(),
+      tokenGestaoExpiraEm: new Date(Date.now() + 1000 * 60 * 60 * 24 * 90),
     },
   });
 
@@ -95,6 +121,7 @@ export async function POST(request: Request) {
     servico: servico.nome,
     dataHora: agendamento.dataHora,
     precoCents: servico.precoCents,
+    tokenGestao: agendamento.tokenGestao!,
   }).catch((e) => {
     console.error("Falha ao enviar email de confirmação:", e);
   });

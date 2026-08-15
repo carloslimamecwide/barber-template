@@ -14,6 +14,7 @@ type Serie = {
   motivoBloqueio: string | null;
   cliente: { id: string; nome: string; telefone: string };
   servico: { id: string; nome: string; duracaoMin: number; precoCents: number };
+  profissional: { id: string; nome: string } | null;
   agendamentos: { id: string; dataHora: string; status: string }[];
 };
 
@@ -120,7 +121,7 @@ export function RecorrentesView() {
                     {s.cliente.nome}
                   </p>
                   <p className="text-sm text-muted">
-                    {s.servico.nome} · {descricao(s)}
+                    {s.servico.nome} · {descricao(s)}{s.profissional ? ` · ${s.profissional.nome}` : " · qualquer profissional"}
                   </p>
                   {s.motivoBloqueio && (
                     <p className="mt-0.5 text-xs text-red-400">

@@ -33,6 +33,20 @@ model User {
   createdAt    DateTime @default(now())
 }
 
+model Profissional {
+  id           String         @id @default(cuid())
+  nome         String
+  telefone     String?
+  email        String?
+  ativo        Boolean        @default(true)
+  ordem        Int            @default(0)
+  criadoEm     DateTime       @default(now())
+  agendamentos Agendamento[]
+  series       SerieRecorrente[]
+
+  @@index([ativo, ordem])
+}
+
 model Cliente {
   id          String        @id @default(cuid())
   nome        String
@@ -58,6 +72,7 @@ model Agendamento {
   id                   String            @id @default(cuid())
   clienteId            String
   servicoId            String
+  profissionalId       String?
   dataHora             DateTime
   status               StatusAgendamento @default(agendado)
   precoCobrado         Int
@@ -67,15 +82,19 @@ model Agendamento {
   tokenProposta        String?           @unique
   propostaStatus       StatusProposta?
   propostaExpiraEm     DateTime?
+  tokenGestao          String?           @unique
+  tokenGestaoExpiraEm  DateTime?
   serieId              String?
   lembreteEnviadoEm    DateTime?
   cliente              Cliente           @relation(fields: [clienteId], references: [id])
   servico              Servico           @relation(fields: [servicoId], references: [id])
+  profissional         Profissional?     @relation(fields: [profissionalId], references: [id], onDelete: SetNull)
   serie                SerieRecorrente?  @relation(fields: [serieId], references: [id], onDelete: SetNull)
 
   @@index([dataHora])
   @@index([clienteId])
   @@index([servicoId])
+  @@index([profissionalId, dataHora])
   @@index([serieId])
 }
 
@@ -83,6 +102,7 @@ model SerieRecorrente {
   id               String       @id @default(cuid())
   clienteId        String
   servicoId        String
+  profissionalId   String?
   diaDaSemana      Int
   hora             String
   intervaloSemanas Int          @default(1)
@@ -94,10 +114,12 @@ model SerieRecorrente {
   criadaEm         DateTime     @default(now())
   cliente          Cliente      @relation(fields: [clienteId], references: [id], onDelete: Cascade)
   servico          Servico      @relation(fields: [servicoId], references: [id], onDelete: Restrict)
+  profissional      Profissional? @relation(fields: [profissionalId], references: [id], onDelete: SetNull)
   agendamentos     Agendamento[]
 
   @@index([clienteId])
   @@index([servicoId])
+  @@index([profissionalId])
   @@index([estado])
 }
 
@@ -107,6 +129,8 @@ model HorarioFuncionamento {
   aberto      Boolean @default(false)
   abertura    String?
   fecho       String?
+  pausaInicio String?
+  pausaFim    String?
 }
 
 model DiaFechado {

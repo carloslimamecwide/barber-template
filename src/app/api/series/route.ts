@@ -14,7 +14,7 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: "Dados inválidos" }, { status: 400 });
   }
-  const { clienteId, servicoId, diaDaSemana, hora, intervaloSemanas, dataInicio } = parsed.data;
+  const { clienteId, servicoId, profissionalId, diaDaSemana, hora, intervaloSemanas, dataInicio } = parsed.data;
 
   const servico = await prisma.servico.findUnique({ where: { id: servicoId } });
   if (!servico) {
@@ -25,6 +25,7 @@ export async function POST(request: Request) {
     data: {
       clienteId,
       servicoId,
+      profissionalId,
       diaDaSemana,
       hora,
       intervaloSemanas,
@@ -46,6 +47,7 @@ export async function GET() {
     include: {
       cliente: { select: { id: true, nome: true, telefone: true } },
       servico: { select: { id: true, nome: true, duracaoMin: true, precoCents: true } },
+      profissional: { select: { id: true, nome: true } },
       agendamentos: {
         where: { dataHora: { gte: agora }, status: "agendado" },
         select: { id: true, dataHora: true, status: true },

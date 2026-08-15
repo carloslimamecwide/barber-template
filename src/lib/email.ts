@@ -2,12 +2,17 @@ import { Resend } from "resend";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
+function esc(value: string): string {
+  return value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char] ?? char);
+}
+
 export async function enviarEmailConfirmacao(input: {
   email: string;
   nome: string;
   servico: string;
   dataHora: Date;
   precoCents: number;
+  tokenGestao: string;
 }) {
   const data = new Intl.DateTimeFormat("pt-PT", {
     weekday: "long",
@@ -17,6 +22,8 @@ export async function enviarEmailConfirmacao(input: {
     hour: "2-digit",
     minute: "2-digit",
   }).format(input.dataHora);
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  const linkGestao = `${baseUrl}/marcacao/${input.tokenGestao}`;
 
   await resend.emails.send({
     from: `Barbearia <onboarding@resend.dev>`,
@@ -24,12 +31,13 @@ export async function enviarEmailConfirmacao(input: {
     subject: "Marcação confirmada",
     html: `<div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;padding:24px;background:#111;color:#f5f0e8;border-radius:12px">
       <h2 style="color:#d4af37;margin:0 0 8px">Marcação confirmada</h2>
-      <p>Olá <strong>${input.nome}</strong>, a tua marcação está confirmada:</p>
+      <p>Olá <strong>${esc(input.nome)}</strong>, a tua marcação está confirmada:</p>
       <ul style="line-height:1.8;list-style:none;padding:0">
-        <li><strong>Serviço:</strong> ${input.servico}</li>
+        <li><strong>Serviço:</strong> ${esc(input.servico)}</li>
         <li><strong>Data/hora:</strong> ${data}</li>
         <li><strong>Preço:</strong> ${(input.precoCents / 100).toFixed(2).replace(".", ",")} €</li>
       </ul>
+      <p><a href="${linkGestao}" style="color:#d4af37">Gerir, cancelar ou pedir outro horário</a></p>
       <p style="color:#aaa;font-size:13px">Chega 5 minutos antes. Qualquer alteração, contacta-nos.</p>
     </div>`,
   });

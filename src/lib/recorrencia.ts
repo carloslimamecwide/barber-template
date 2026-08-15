@@ -1,6 +1,8 @@
 import { dateOnlyToDate, toDateOnlyString } from "@/lib/horarios";
 
-export const JANELA_DIAS = 365;
+export function fimDoAno(agora: Date): string {
+  return `${agora.getFullYear()}-12-31`;
+}
 
 export function datasOcorrencia(input: {
   diaDaSemana: number;

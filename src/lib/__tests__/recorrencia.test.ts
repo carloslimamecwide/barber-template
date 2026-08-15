@@ -1,5 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { datasOcorrencia, slotValido } from "@/lib/recorrencia";
+import { datasOcorrencia, fimDoAno, slotValido } from "@/lib/recorrencia";
+
+describe("fimDoAno", () => {
+  it("devolve 31 de dezembro do ano corrente (meados do ano)", () => {
+    expect(fimDoAno(new Date(2026, 6, 31))).toBe("2026-12-31");
+  });
+  it("devolve 31 de dezembro quando o agora é 1 de janeiro", () => {
+    expect(fimDoAno(new Date(2026, 0, 1))).toBe("2026-12-31");
+  });
+  it("devolve o próprio 31 de dezembro quando o agora é 31 de dezembro", () => {
+    expect(fimDoAno(new Date(2026, 11, 31))).toBe("2026-12-31");
+  });
+  it("avança para o ano novo na viragem (1 de janeiro do ano seguinte)", () => {
+    expect(fimDoAno(new Date(2027, 0, 1))).toBe("2027-12-31");
+  });
+});
 
 describe("datasOcorrencia", () => {
   it("alinhar semana a partir de uma data de fase", () => {

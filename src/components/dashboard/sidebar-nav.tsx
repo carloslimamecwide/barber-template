@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CalendarDays, Users, ScissorsLineDashed, Clock, BarChart3, Repeat } from "lucide-react";
+import { CalendarDays, Users, ScissorsLineDashed, Clock, BarChart3, Repeat, UserRound } from "lucide-react";
 
 const NAV = [
   { href: "/dashboard", label: "Agenda", icon: CalendarDays, exact: true },
   { href: "/dashboard/recorrentes", label: "Recorrentes", icon: Repeat },
   { href: "/dashboard/clientes", label: "Clientes", icon: Users },
+  { href: "/dashboard/profissionais", label: "Profissionais", icon: UserRound },
   { href: "/dashboard/servicos", label: "Serviços", icon: ScissorsLineDashed },
   { href: "/dashboard/horarios", label: "Horários", icon: Clock },
   { href: "/dashboard/estatisticas", label: "Estatísticas", icon: BarChart3 },

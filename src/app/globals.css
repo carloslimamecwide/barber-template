@@ -1,26 +1,156 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@theme {
+  --color-bg: #0c0a08;
+  --color-surface: #14110d;
+  --color-surface2: #1c1813;
+  --color-line: #2a241c;
+  --color-line2: #3a3226;
+  --color-gold: #c9a24b;
+  --color-gold-soft: #e3c884;
+  --color-ink: #f2ecdf;
+  --color-muted: #9c917e;
+  --color-danger: #c05454;
+  --color-success: #6fa36b;
+  --font-display: var(--font-cormorant), Georgia, serif;
+  --font-sans: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  scroll-behavior: smooth;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  background-image: radial-gradient(ellipse 60% 40% at 70% -10%, rgba(201, 162, 75, 0.07), transparent 60%),
+    radial-gradient(ellipse 40% 30% at 10% 110%, rgba(201, 162, 75, 0.05), transparent 60%);
+  background-attachment: fixed;
+}
+
+::selection {
+  background: rgba(201, 162, 75, 0.35);
+  color: #fff;
+}
+
+@layer components {
+  .btn,
+  .btn-gold,
+  .btn-outline,
+  .btn-ghost,
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 rounded-sm px-5 py-2.5 text-sm font-semibold tracking-wide transition-all duration-200 cursor-pointer select-none disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+  .btn-gold {
+    @apply bg-gold text-bg hover:bg-gold-soft;
+  }
+  .btn-outline {
+    @apply border border-line2 text-ink hover:border-gold hover:text-gold;
+  }
+  .btn-ghost {
+    @apply text-muted hover:text-gold;
+  }
+  .btn-danger {
+    @apply border border-danger/40 text-danger hover:bg-danger/10;
+  }
+  .card {
+    @apply rounded-md border border-line bg-surface;
+  }
+  .card-pad {
+    @apply p-5 sm:p-6;
+  }
+  .input {
+    @apply w-full rounded-sm border border-line bg-bg px-3.5 py-2.5 text-sm text-ink placeholder:text-muted/60 outline-none transition-colors focus:border-gold;
+  }
+  .label {
+    @apply mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-muted;
+  }
+  .eyebrow {
+    @apply text-xs font-bold uppercase tracking-[0.28em] text-gold;
+  }
+  .rule {
+    @apply h-px w-full bg-gradient-to-r from-gold/60 via-line2 to-transparent;
+  }
+  .badge,
+  .badge-gold,
+  .badge-green,
+  .badge-red,
+  .badge-gray {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-line2 px-2.5 py-0.5 text-xs font-semibold;
+  }
+  .badge-gold {
+    @apply border-gold/40 text-gold;
+  }
+  .badge-green {
+    @apply border-success/40 text-success;
+  }
+  .badge-red {
+    @apply border-danger/40 text-danger;
+  }
+  .badge-gray {
+    @apply text-muted;
+  }
+  .nav-link,
+  .nav-link-active {
+    @apply flex items-center gap-3 rounded-sm px-3 py-2 text-sm text-muted transition-colors hover:bg-surface2 hover:text-ink;
+  }
+  .nav-link-active {
+    @apply bg-surface2 text-gold;
+  }
+}
+
+@layer utilities {
+  .animate-rise {
+    animation: rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .animate-fade {
+    animation: fade 0.8s ease both;
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+dialog {
+  border: none;
+  padding: 0;
+  background: transparent;
+}
+
+dialog::backdrop {
+  background: rgba(8, 6, 4, 0.75);
+  backdrop-filter: blur(3px);
+}
+
+dialog[open] {
+  animation: fade 0.2s ease both;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.8) sepia(0.4) saturate(2) hue-rotate(10deg);
+  cursor: pointer;
+}
+
+select option {
+  background-color: var(--color-surface);
+  color: var(--color-ink);
 }

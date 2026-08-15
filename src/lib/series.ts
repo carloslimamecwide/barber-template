@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { combineDateAndTime, gerarSlots, toDateOnlyString } from "@/lib/horarios";
 import { obterHorarioDoDia, obterOcupacoesDoDia } from "@/lib/disponibilidade";
-import { datasOcorrencia, slotValido, JANELA_DIAS } from "@/lib/recorrencia";
+import { datasOcorrencia, fimDoAno, slotValido } from "@/lib/recorrencia";
 
 export async function gerarOcorrenciasSerie(
   serieId: string,
@@ -13,11 +13,15 @@ export async function gerarOcorrenciasSerie(
   });
   if (!serie || serie.estado !== "ativa") return { criadas: 0 };
 
-  const fimInicial = new Date(serie.dataInicio);
-  fimInicial.setDate(fimInicial.getDate() + JANELA_DIAS);
-  const fimHoje = new Date(agora);
-  fimHoje.setDate(fimHoje.getDate() + JANELA_DIAS);
-  const dataFim = toDateOnlyString(fimInicial > fimHoje ? fimInicial : fimHoje);
+  const dataFim = fimDoAno(agora);
+
+  await prisma.agendamento.deleteMany({
+    where: {
+      serieId,
+      status: "agendado",
+      dataHora: { gt: combineDateAndTime(dataFim, "23:59") },
+    },
+  });
 
   const datas = datasOcorrencia({
     diaDaSemana: serie.diaDaSemana,
@@ -40,7 +44,7 @@ export async function gerarOcorrenciasSerie(
 
     const [horario, ocupacoes] = await Promise.all([
       obterHorarioDoDia(dataStr),
-      obterOcupacoesDoDia(dataStr),
+      obterOcupacoesDoDia(dataStr, undefined, serie.profissionalId ?? undefined),
     ]);
     const slots = gerarSlots({
       data: dataStr,
@@ -61,6 +65,7 @@ export async function gerarOcorrenciasSerie(
       data: {
         clienteId: serie.clienteId,
         servicoId: serie.servicoId,
+        profissionalId: serie.profissionalId,
         dataHora,
         status: "agendado",
         precoCobrado: serie.servico.precoCents,

@@ -8,6 +8,7 @@ import { diaDaSemana } from "@/lib/horarios";
 
 type Cliente = { id: string; nome: string };
 type Servico = { id: string; nome: string; duracaoMin: number };
+type Profissional = { id: string; nome: string };
 
 export function NovaMarcacaoDialog({
   open,
@@ -15,12 +16,14 @@ export function NovaMarcacaoDialog({
   onCriada,
   clientes,
   servicos,
+  profissionais,
 }: {
   open: boolean;
   onClose: () => void;
   onCriada: () => void;
   clientes: Cliente[];
   servicos: Servico[];
+  profissionais?: Profissional[];
 }) {
   return (
     <Dialog open={open} onClose={onClose} title="Nova marcação">
@@ -30,6 +33,7 @@ export function NovaMarcacaoDialog({
         onClose={onClose}
         clientes={clientes}
         servicos={servicos}
+        profissionais={profissionais ?? []}
       />
     </Dialog>
   );
@@ -40,14 +44,17 @@ function NovaMarcacaoForm({
   onCriada,
   clientes,
   servicos,
+  profissionais,
 }: {
   onClose: () => void;
   onCriada: () => void;
   clientes: Cliente[];
   servicos: Servico[];
+  profissionais: Profissional[];
 }) {
   const [clienteId, setClienteId] = useState("");
   const [servicoId, setServicoId] = useState("");
+  const [profissionalId, setProfissionalId] = useState("");
   const [data, setData] = useState(toDateInputValue(new Date()));
   const [hora, setHora] = useState("10:00");
   const [notas, setNotas] = useState("");
@@ -65,8 +72,8 @@ function NovaMarcacaoForm({
     try {
       const url = repetir ? "/api/series" : "/api/agendamentos/manual";
       const body = repetir
-        ? { clienteId, servicoId, diaDaSemana: diaSerie, hora, intervaloSemanas, dataInicio: data }
-        : { clienteId, servicoId, data, hora, notas };
+        ? { clienteId, servicoId, profissionalId: profissionalId || undefined, diaDaSemana: diaSerie, hora, intervaloSemanas, dataInicio: data }
+        : { clienteId, servicoId, profissionalId: profissionalId || undefined, data, hora, notas };
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -107,6 +114,7 @@ function NovaMarcacaoForm({
             ))}
           </select>
         </div>
+        {profissionais.length > 0 && <div><label className="label" htmlFor="nm-profissional">Profissional</label><select id="nm-profissional" className="input" value={profissionalId} onChange={(e) => setProfissionalId(e.target.value)}><option value="">Qualquer profissional</option>{profissionais.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}</select></div>}
         <div>
           <label className="label" htmlFor="nm-servico">
             Serviço

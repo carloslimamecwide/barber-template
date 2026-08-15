@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight, MessageCircle, Plus } from "lucide-react";
 import { Dialog } from "@/components/ui/dialog";
 import { toast, Toaster } from "@/components/ui/toaster";
 import { NovaMarcacaoDialog } from "@/components/dashboard/nova-marcacao-dialog";
@@ -17,11 +17,13 @@ type Agendamento = {
   novaDataHoraProposta?: string | null;
   cliente: { id: string; nome: string; telefone: string };
   servico: { id: string; nome: string; duracaoMin: number };
+  profissional?: { id: string; nome: string } | null;
   serie?: { id: string } | null;
 };
 
 type Cliente = { id: string; nome: string };
 type Servico = { id: string; nome: string; duracaoMin: number };
+type Profissional = { id: string; nome: string; ativo: boolean };
 
 const STATUS: Record<string, { label: string; classe: string }> = {
   agendado: { label: "Agendado", classe: "badge-gold" },
@@ -41,6 +43,8 @@ export function AgendaView() {
   const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [servicos, setServicos] = useState<Servico[]>([]);
+  const [profissionais, setProfissionais] = useState<Profissional[]>([]);
+  const [profissionalId, setProfissionalId] = useState("");
   const [carregando, setCarregando] = useState(true);
   const [nova, setNova] = useState(false);
 
@@ -54,7 +58,9 @@ export function AgendaView() {
 
   const carregar = useCallback(async (d: string) => {
     try {
-      const res = await fetch(`/api/agendamentos?data=${d}`);
+      const params = new URLSearchParams({ data: d });
+      if (profissionalId) params.set("profissionalId", profissionalId);
+      const res = await fetch(`/api/agendamentos?${params.toString()}`);
       const json = await res.json();
       setAgendamentos(json);
     } catch {
@@ -62,7 +68,7 @@ export function AgendaView() {
     } finally {
       setCarregando(false);
     }
-  }, []);
+  }, [profissionalId]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -73,10 +79,12 @@ export function AgendaView() {
     Promise.all([
       fetch("/api/clientes").then((r) => r.json()),
       fetch("/api/servicos").then((r) => r.json()),
+      fetch("/api/profissionais").then((r) => r.json()),
     ])
-      .then(([c, s]) => {
+      .then(([c, s, p]) => {
         setClientes(c);
         setServicos(s);
+        setProfissionais(p);
       })
       .catch(() => {
         toast("Erro ao carregar dados", "erro");
@@ -186,6 +194,12 @@ export function AgendaView() {
             Hoje
           </button>
         )}
+        {profissionais.length > 0 && (
+          <select className="input !w-auto" value={profissionalId} onChange={(e) => setProfissionalId(e.target.value)} aria-label="Filtrar por profissional">
+            <option value="">Todos os profissionais</option>
+            {profissionais.filter((p) => p.ativo).map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
+          </select>
+        )}
         <div className="ml-auto flex gap-2 text-sm">
           <span className="badge-gold">
             {agendamentos.filter((a) => a.status === "agendado").length} por atender
@@ -219,7 +233,7 @@ export function AgendaView() {
                     )}
                   </p>
                   <p className="text-sm text-muted">
-                    {a.cliente.telefone} · {a.servico.nome}
+                    {a.cliente.telefone} · {a.servico.nome}{a.profissional ? ` · ${a.profissional.nome}` : ""}
                   </p>
                   {a.novaDataHoraProposta && (
                     <p className="mt-0.5 text-xs text-gold-soft">
@@ -232,6 +246,14 @@ export function AgendaView() {
                   <span className="text-sm text-muted">{formatPreco(a.precoCobrado)}</span>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
+                  <a
+                    className="btn-outline !py-1.5 !px-3 !text-xs"
+                    href={`https://wa.me/${a.cliente.telefone.replace(/\D/g, "")}?text=${encodeURIComponent(`Olá ${a.cliente.nome}, lembramos a tua marcação de ${a.servico.nome}.`)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <MessageCircle className="h-3.5 w-3.5" /> WhatsApp
+                  </a>
                   <select
                     className="input !w-auto !py-1.5 !text-xs"
                     value={a.status}
@@ -264,6 +286,7 @@ export function AgendaView() {
         onCriada={() => carregar(data)}
         clientes={clientes}
         servicos={servicos}
+        profissionais={profissionais}
       />
 
       <Dialog
