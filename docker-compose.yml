@@ -2,7 +2,7 @@ version: "3.8"
 
 services:
   app:
-    image: ghcr.io/carloslimamecwide/barbearia:latest
+    image: ghcr.io/carloslimamecwide/barber-template:latest
     container_name: barbearia-app
     restart: unless-stopped
     ports:

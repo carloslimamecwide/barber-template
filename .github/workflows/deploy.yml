@@ -83,7 +83,7 @@ jobs:
           docker run --rm \
             --network data \
             --env-file .env \
-            ghcr.io/carloslimamecwide/barbearia:latest \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
             npx prisma db push --accept-data-loss
 
       - name: Deploy application
