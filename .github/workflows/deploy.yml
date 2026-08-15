@@ -2,7 +2,7 @@ name: CI/CD - Build & Deploy
 
 on:
   push:
-    branches: [master]
+    branches: [main]
 
 env:
   REGISTRY: ghcr.io
