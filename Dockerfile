@@ -9,6 +9,7 @@ COPY package.json package-lock.json* ./
 RUN npm ci
 
 COPY prisma ./prisma/
+COPY prisma.config.ts ./
 RUN npx prisma generate
 
 COPY . .
@@ -31,6 +32,7 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/prisma.config.ts ./
 COPY --from=builder /app/next.config.* ./
 
 EXPOSE 3000
