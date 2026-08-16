@@ -5,6 +5,8 @@ import { BookingForm } from "@/components/landing/booking-form";
 import { Toaster } from "@/components/ui/toaster";
 import { DIAS_SEMANA, formatPreco } from "@/lib/format";
 
+export const dynamic = "force-dynamic";
+
 async function getDados() {
   try {
     const [servicos, horarios] = await Promise.all([
@@ -12,7 +14,8 @@ async function getDados() {
       prisma.horarioFuncionamento.findMany({ orderBy: { diaDaSemana: "asc" } }),
     ]);
     return { servicos, horarios };
-  } catch {
+  } catch (error) {
+    console.error("Erro ao carregar dados da landing page:", error);
     return { servicos: [], horarios: [] };
   }
 }

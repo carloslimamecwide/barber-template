@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { ReagendarForm, ReagendarShell } from "@/components/reagendar/reagendar-form";
 
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "Reagendar — Barbearia Nobre",
 };
@@ -32,7 +34,8 @@ export default async function ReagendarPage({
   let agendamento: Awaited<ReturnType<typeof getAgendamento>> | null = null;
   try {
     agendamento = await getAgendamento(token);
-  } catch {
+  } catch (error) {
+    console.error("Erro ao carregar proposta de reagendamento:", error);
     agendamento = null;
   }
 
