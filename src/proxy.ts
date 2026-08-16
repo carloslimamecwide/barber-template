@@ -1,12 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getIronSession } from "iron-session";
 import { sessionOptions, type SessionData } from "@/lib/session";
+import { origemMutacaoPermitida } from "@/lib/origin";
 
 export default async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const mutating = !["GET", "HEAD", "OPTIONS"].includes(req.method);
   const origin = req.headers.get("origin");
-  if (pathname.startsWith("/api/") && mutating && origin && origin !== req.nextUrl.origin) {
+  if (pathname.startsWith("/api/") && mutating && origin && !origemMutacaoPermitida(req, origin)) {
     return NextResponse.json(
       { error: { code: "INVALID_ORIGIN", message: "Origem do pedido inválida" } },
       { status: 403 },
