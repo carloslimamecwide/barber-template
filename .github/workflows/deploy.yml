@@ -2,7 +2,8 @@ name: CI/CD - Build & Deploy
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
 
 env:
   REGISTRY: ghcr.io
@@ -12,9 +13,11 @@ jobs:
   build:
     name: Build & Push Image
     runs-on: ubuntu-latest
+
     permissions:
       contents: read
       packages: write
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -51,22 +54,45 @@ jobs:
   deploy:
     name: Deploy to VPS
     needs: build
-    runs-on: [self-hosted, Linux, X64]
+    runs-on:
+      - self-hosted
+      - Linux
+      - X64
+
+    permissions:
+      contents: read
+      packages: read
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Create .env file
+      - name: Prepare deployment directory
         run: |
-          cat > .env <<EOF
-          DATABASE_URL=${{ secrets.DATABASE_URL }}
-          NEXT_PUBLIC_APP_URL=${{ secrets.NEXT_PUBLIC_APP_URL }}
-          RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}
-          SESSION_SECRET=${{ secrets.SESSION_SECRET }}
-          CRON_SECRET=${{ secrets.CRON_SECRET }}
-          BARBER_EMAIL=${{ secrets.BARBER_EMAIL }}
-          BARBER_PASSWORD=${{ secrets.BARBER_PASSWORD }}
-          EOF
+          cp docker-compose.yml /srv/apps/barber/docker-compose.yml
+
+      - name: Create .env file
+        working-directory: /srv/apps/barber
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          NEXT_PUBLIC_APP_URL: ${{ secrets.NEXT_PUBLIC_APP_URL }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          BARBER_EMAIL: ${{ secrets.BARBER_EMAIL }}
+          BARBER_PASSWORD: ${{ secrets.BARBER_PASSWORD }}
+        run: |
+          {
+            printf 'DATABASE_URL=%s\n' "$DATABASE_URL"
+            printf 'NEXT_PUBLIC_APP_URL=%s\n' "$NEXT_PUBLIC_APP_URL"
+            printf 'RESEND_API_KEY=%s\n' "$RESEND_API_KEY"
+            printf 'SESSION_SECRET=%s\n' "$SESSION_SECRET"
+            printf 'CRON_SECRET=%s\n' "$CRON_SECRET"
+            printf 'BARBER_EMAIL=%s\n' "$BARBER_EMAIL"
+            printf 'BARBER_PASSWORD=%s\n' "$BARBER_PASSWORD"
+          } > .env
+
+          chmod 600 .env
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -76,23 +102,42 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Pull latest image
-        run: docker compose pull app
+        working-directory: /srv/apps/barber
+        run: docker compose -p barber-template pull app
 
-      - name: Run Prisma db push
+      - name: Update database
+        working-directory: /srv/apps/barber
         run: |
           docker run --rm \
             --network data \
             --env-file .env \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
-            npx prisma db push --accept-data-loss
+            "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest" \
+            npx prisma db push
 
       - name: Deploy application
-        run: docker compose up -d --remove-orphans
-
-      - name: Clean up old images
-        run: docker image prune -af
+        working-directory: /srv/apps/barber
+        run: |
+          docker compose \
+            -p barber-template \
+            up -d --force-recreate --remove-orphans
 
       - name: Health check
         run: |
-          sleep 15
-          curl -f http://localhost:3000 || exit 1
+          for attempt in {1..12}; do
+            if curl --fail --silent --location \
+              http://localhost:3000/pt > /dev/null; then
+              echo "Application is healthy."
+              exit 0
+            fi
+
+            echo "Waiting for application: attempt ${attempt}/12"
+            sleep 5
+          done
+
+          echo "Application health check failed."
+          docker logs barbearia-app --tail 100
+          exit 1
+
+      - name: Clean up old images
+        if: success()
+        run: docker image prune -f
