@@ -19,9 +19,10 @@ export async function criarAgendamento(input: {
   serieId?: string;
 }) {
   return transacaoSerializavel(async (tx) => {
-    const servico = await tx.servico.findUnique({ where: { id: input.servicoId }, include: { servicos: true } });
+    const servico = await tx.servico.findUnique({ where: { id: input.servicoId } });
     if (!servico?.ativo) throw new Error("SERVICO_INATIVO");
-    const habilitados = servico.servicos.map((item) => item.profissionalId);
+    const personalizacoes = await tx.servicoProfissional.findMany({ where: { servicoId: servico.id } });
+    const habilitados = personalizacoes.map((item) => item.profissionalId);
     const filtroProfissionais = input.profissionalId
       ? (!habilitados.length || habilitados.includes(input.profissionalId) ? [input.profissionalId] : [])
       : habilitados;
@@ -41,7 +42,7 @@ export async function criarAgendamento(input: {
     let ultimoErro: unknown;
     for (const candidato of profissionais) {
       try {
-        const personalizacao = servico.servicos.find((item) => item.profissionalId === candidato.id);
+        const personalizacao = personalizacoes.find((item) => item.profissionalId === candidato.id);
         const duracaoCandidato = personalizacao?.duracaoMin ?? servico.duracaoMin;
         dataHora = await validarSlot({
           data: input.data,
@@ -64,6 +65,7 @@ export async function criarAgendamento(input: {
     }
 
     let clienteId = input.clienteId;
+    let clienteRecord: { id: string; nome: string; telefone: string; email: string | null } | null = null;
     let email: string | null = null;
     let nome = "";
     if (input.cliente) {
@@ -83,8 +85,10 @@ export async function criarAgendamento(input: {
         },
       });
       clienteId = cliente.id;
+      clienteRecord = cliente;
       email = cliente.email;
       nome = cliente.nome;
+      clienteRecord = cliente;
     } else if (clienteId) {
       const cliente = await tx.cliente.findUnique({ where: { id: clienteId } });
       if (!cliente?.ativo) throw new Error("CLIENTE_INATIVO");
@@ -94,7 +98,7 @@ export async function criarAgendamento(input: {
     if (!clienteId) throw new Error("CLIENTE_INVALIDO");
 
     const gestao = input.serieId ? null : criarToken();
-    const agendamento = await tx.agendamento.create({
+    const criado = await tx.agendamento.create({
       data: {
         clienteId,
         servicoId: servico.id,
@@ -109,8 +113,8 @@ export async function criarAgendamento(input: {
         motivoExcecao: input.permitirExcecao ? input.motivoExcecao : null,
         serieId: input.serieId,
       },
-      include: { cliente: true, servico: true, profissional: true },
     });
+    const agendamento = { ...criado, cliente: clienteRecord!, servico, profissional: escolhido };
 
     let notificacao = null;
     if (input.notificar !== false && email && gestao) {

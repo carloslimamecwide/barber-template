@@ -37,7 +37,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
         profissionalId: proposta.agendamento.profissionalId,
         excluirId: proposta.agendamentoId, db: tx,
       });
-      await tx.agendamento.update({ where: { id: proposta.agendamentoId }, data: { dataHora: proposta.novaDataHora } });
+      await tx.agendamento.update({ where: { id: proposta.agendamentoId }, data: { dataHora: proposta.novaDataHora, versao: { increment: 1 } } });
       await tx.propostaReagendamento.update({ where: { id: proposta.id }, data: { status: "confirmada", respondidaEm: new Date() } });
       return "confirmado";
     });

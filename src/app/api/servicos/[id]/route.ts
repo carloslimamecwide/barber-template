@@ -44,3 +44,12 @@ export async function DELETE(
   await auditar({ userId: auth.userId, acao: "arquivar", entidade: "Servico", entidadeId: id, request });
   return NextResponse.json({ ok: true });
 }
+
+export async function PATCH(request: Request, ctx: { params: Promise<{ id: string }> }) {
+  const auth = await requireStaff();
+  if (!auth) return apiError("FORBIDDEN", "Sem permissão", 403);
+  const { id } = await ctx.params;
+  const servico = await prisma.servico.update({ where: { id }, data: { ativo: true } });
+  await auditar({ userId: auth.userId, acao: "reativar", entidade: "Servico", entidadeId: id, request });
+  return NextResponse.json(servico);
+}

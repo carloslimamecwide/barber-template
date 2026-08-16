@@ -14,7 +14,12 @@ RUN npx prisma generate
 
 COPY . .
 
+# Next.js avalia os módulos das Route Handlers durante o build. Estes valores
+# são apenas sintáticos: o adapter não abre uma ligação nesta fase e o runner
+# recebe as credenciais reais através do env_file/secret store.
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV DATABASE_URL="postgresql://build:build@127.0.0.1:5432/build"
+ENV SESSION_SECRET="build-only-session-secret-not-used-at-runtime"
 RUN npm run build
 
 # Stage 2: Production

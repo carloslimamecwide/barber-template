@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { Dialog } from "@/components/ui/dialog";
 import { toast, Toaster } from "@/components/ui/toaster";
 import { useConfirm } from "@/hooks/use-confirm";
@@ -119,6 +119,11 @@ export function ServicosView() {
     }
   }
 
+  async function reativar(s: Servico) {
+    const res = await fetch(`/api/servicos/${s.id}`, { method: "PATCH" });
+    if (res.ok) { toast("Serviço reativado"); carregar(); } else toast("Não foi possível reativar", "erro");
+  }
+
   return (
     <div>
       <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
@@ -174,9 +179,7 @@ export function ServicosView() {
                       <button className="btn-ghost !p-2" onClick={() => abrirEdicao(s)} aria-label="Editar">
                         <Pencil className="h-4 w-4" />
                       </button>
-                      <button className="btn-ghost !p-2 hover:!text-danger" onClick={() => apagar(s)} aria-label="Apagar">
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      {s.ativo ? <button className="btn-ghost !p-2 hover:!text-danger" onClick={() => apagar(s)} aria-label="Arquivar"><Trash2 className="h-4 w-4" /></button> : <button className="btn-ghost !p-2" onClick={() => reativar(s)} aria-label="Reativar"><RotateCcw className="h-4 w-4" /></button>}
                     </div>
                   </td>
                 </tr>

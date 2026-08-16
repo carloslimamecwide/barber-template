@@ -41,6 +41,7 @@ export function RecorrentesView() {
   const [aEnviar, setAEnviar] = useState<string | null>(null);
   const { confirm, dialog } = useConfirm();
   const [editar, setEditar] = useState<Serie | null>(null);
+  const [detalhe, setDetalhe] = useState<Serie | null>(null);
   const [opcoes, setOpcoes] = useState<{ clientes: { id: string; nome: string; ativo: boolean }[]; servicos: { id: string; nome: string; ativo: boolean }[]; profissionais: { id: string; nome: string; ativo: boolean }[] }>({ clientes: [], servicos: [], profissionais: [] });
   const [form, setForm] = useState({ clienteId: "", servicoId: "", profissionalId: "", diaDaSemana: 1, hora: "09:00", intervaloSemanas: 1, dataInicio: "" });
 
@@ -135,6 +136,13 @@ export function RecorrentesView() {
     finally { setAEnviar(null); }
   }
 
+  async function cancelarOcorrencia(serie: Serie, agendamentoId: string) {
+    const confirmado = await confirm({ title: "Cancelar esta ocorrência?", description: "A série continuará ativa e as restantes ocorrências não serão alteradas.", confirmText: "Cancelar ocorrência", variant: "danger" });
+    if (!confirmado) return;
+    const res = await fetch(`/api/agendamentos/${agendamentoId}`, { method: "DELETE" });
+    if (res.ok) { toast("Ocorrência cancelada"); setDetalhe(null); carregar(); } else toast("Não foi possível cancelar", "erro");
+  }
+
   return (
     <div>
       <div className="mb-8">
@@ -190,6 +198,7 @@ export function RecorrentesView() {
                 </div>
                 <div className="flex items-center gap-2">
                   <span className={st.classe}>{st.label}</span>
+                  <button className="btn-outline !py-1.5 !px-3 !text-xs" onClick={() => setDetalhe(s)}>Detalhes</button>
                   <button className="btn-outline !py-1.5 !px-3 !text-xs" onClick={() => abrirEdicao(s)}><Pencil className="h-3.5 w-3.5" />Editar</button>
                   <button
                     className="btn-danger !py-1.5 !px-3 !text-xs"
@@ -220,6 +229,9 @@ export function RecorrentesView() {
           <p className="text-xs text-muted">As ocorrências futuras são regeneradas; o histórico passado é preservado.</p>
           <div className="flex justify-end gap-2"><button className="btn-outline" onClick={() => setEditar(null)}>Cancelar</button><button className="btn-gold" disabled={aEnviar === editar?.id} onClick={guardarEdicao}>Guardar</button></div>
         </div>
+      </Dialog>
+      <Dialog open={detalhe !== null} onClose={() => setDetalhe(null)} title="Detalhe da série">
+        {detalhe && <div className="space-y-5"><div className="rounded-sm border border-line bg-bg px-4 py-3 text-sm"><p className="font-semibold">{detalhe.cliente.nome} · {detalhe.servico.nome}</p><p className="text-muted">{descricao(detalhe)}{detalhe.profissional ? ` · ${detalhe.profissional.nome}` : ""}</p></div><section><h3 className="label">Próximas ocorrências ({detalhe.agendamentos.length})</h3><ul className="max-h-52 space-y-2 overflow-y-auto">{detalhe.agendamentos.map((a) => <li key={a.id} className="flex items-center justify-between rounded-sm border border-line px-3 py-2 text-sm"><span>{formatDataHora(a.dataHora)}</span><button className="btn-danger !px-2 !py-1 !text-xs" onClick={() => cancelarOcorrencia(detalhe, a.id)}>Cancelar apenas esta</button></li>)}</ul></section><section><h3 className="label">Exceções por resolver ({detalhe.excecoes.length})</h3>{detalhe.excecoes.length === 0 ? <p className="text-sm text-muted">Sem conflitos.</p> : <ul className="max-h-44 space-y-2 overflow-y-auto">{detalhe.excecoes.map((item) => <li key={item.id} className="rounded-sm border border-danger/30 px-3 py-2 text-sm"><div className="flex justify-between gap-3"><span>{formatDataHora(item.dataHora)}</span><button className="text-gold underline" onClick={() => tentarExcecao(detalhe.id, item.id)}>Tentar novamente</button></div><p className="mt-1 text-xs text-muted">{item.motivo}</p></li>)}</ul>}</section><div className="flex justify-end"><button className="btn-outline" onClick={() => setDetalhe(null)}>Fechar</button></div></div>}
       </Dialog>
       <Toaster />
     </div>

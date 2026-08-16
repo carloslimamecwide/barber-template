@@ -63,7 +63,9 @@ export async function POST(request: Request) {
         data: { chave, requestHash: hash, expiraEm: new Date(Date.now() + 24 * 60 * 60_000) },
       });
       reservouChave = true;
-    } catch {
+    } catch (error) {
+      const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
+      if (code !== "P2002") throw error;
       const existente = await prisma.idempotencia.findUnique({
         where: { chave }, include: { agendamento: { include: { cliente: true, servico: true, profissional: true } } },
       });

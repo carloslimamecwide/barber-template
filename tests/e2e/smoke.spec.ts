@@ -14,10 +14,12 @@ test("login inválido não cria sessão", async ({ request }) => {
 });
 
 test("administrador entra e abre a agenda", async ({ page }) => {
-  test.skip(!process.env.E2E_EMAIL || !process.env.E2E_PASSWORD, "Credenciais E2E não configuradas");
+  const email = process.env.E2E_EMAIL ?? process.env.BARBER_EMAIL;
+  const password = process.env.E2E_PASSWORD ?? process.env.BARBER_PASSWORD;
+  test.skip(!email || !password, "Credenciais E2E não configuradas");
   await page.goto("/login");
-  await page.getByLabel("Email").fill(process.env.E2E_EMAIL!);
-  await page.getByLabel("Palavra-passe").fill(process.env.E2E_PASSWORD!);
+  await page.getByLabel("Email").fill(email!);
+  await page.getByLabel("Palavra-passe").fill(password!);
   await page.getByRole("button", { name: /entrar/i }).click();
   await expect(page).toHaveURL(/\/dashboard/);
   await expect(page.getByRole("heading", { name: /Marcações/ })).toBeVisible();
