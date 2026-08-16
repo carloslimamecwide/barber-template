@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { Dialog } from "@/components/ui/dialog";
 import { toast, Toaster } from "@/components/ui/toaster";
+import { useConfirm } from "@/hooks/use-confirm";
 import { formatData } from "@/lib/format";
 
 type Cliente = {
@@ -25,6 +26,7 @@ export function ClientesView() {
   const [editar, setEditar] = useState<Cliente | null>(null);
   const [form, setForm] = useState(VAZIO);
   const [aEnviar, setAEnviar] = useState(false);
+  const { confirm, dialog } = useConfirm();
 
   const carregar = useCallback(async () => {
     try {
@@ -90,12 +92,13 @@ export function ClientesView() {
   }
 
   async function apagar(c: Cliente) {
-    if (
-      !window.confirm(
-        `Apagar ${c.nome}? As marcações associadas também serão apagadas.`,
-      )
-    )
-      return;
+    const confirmado = await confirm({
+      title: "Apagar cliente?",
+      description: `Apagar ${c.nome}? As marcações associadas também serão apagadas.`,
+      confirmText: "Apagar",
+      variant: "danger",
+    });
+    if (!confirmado) return;
     const res = await fetch(`/api/clientes/${c.id}`, { method: "DELETE" });
     if (res.ok) {
       toast("Cliente apagado");
@@ -231,6 +234,7 @@ export function ClientesView() {
         </div>
       </Dialog>
 
+      {dialog}
       <Toaster />
     </div>
   );

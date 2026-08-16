@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { toast } from "@/components/ui/toaster";
+import { Select } from "@/components/ui/select";
 import { toDateInputValue } from "@/lib/format";
 
 type Servico = {
@@ -145,39 +146,40 @@ export function BookingForm({ servicos }: { servicos: Servico[] }) {
   return (
     <div className="card card-pad">
       <div className="mb-6 space-y-5">
-        <div>
-          <label className="label" htmlFor="bs-servico">
-            Serviço
-          </label>
-          <select
-            id="bs-servico"
-            className="input"
-            value={servicoId}
-            onChange={(e) => {
-              const valor = e.target.value;
-              setServicoId(valor);
-              setSlots([]);
-              setHora("");
-              if (valor && data) carregarSlots(data);
-            }}
-          >
-            <option value="">Escolhe um serviço</option>
-            {servicos.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.nome} — {(s.precoCents / 100).toFixed(2).replace(".", ",")} €
-              </option>
-            ))}
-          </select>
-        </div>
+        <Select
+          label="Serviço"
+          id="bs-servico"
+          value={servicoId}
+          onChange={(valor) => {
+            setServicoId(valor);
+            setSlots([]);
+            setHora("");
+            if (valor && data) carregarSlots(data);
+          }}
+        >
+          <option value="">Escolhe um serviço</option>
+          {servicos.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.nome} — {(s.precoCents / 100).toFixed(2).replace(".", ",")} €
+            </option>
+          ))}
+        </Select>
 
         {profissionais.length > 0 && (
-          <div>
-            <label className="label" htmlFor="bs-profissional">Profissional</label>
-            <select id="bs-profissional" className="input" value={profissionalId} onChange={(e) => { setProfissionalId(e.target.value); setSlots([]); setHora(""); if (data && servicoId) carregarSlots(data, e.target.value); }}>
-              <option value="">Qualquer profissional</option>
-              {profissionais.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
-            </select>
-          </div>
+          <Select
+            label="Profissional"
+            id="bs-profissional"
+            value={profissionalId}
+            onChange={(valor) => {
+              setProfissionalId(valor);
+              setSlots([]);
+              setHora("");
+              if (data && servicoId) carregarSlots(data, valor);
+            }}
+          >
+            <option value="">Qualquer profissional</option>
+            {profissionais.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
+          </Select>
         )}
 
         <div>

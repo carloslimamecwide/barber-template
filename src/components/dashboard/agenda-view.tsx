@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, MessageCircle, Plus } from "lucide-react";
 import { Dialog } from "@/components/ui/dialog";
+import { Select } from "@/components/ui/select";
 import { toast, Toaster } from "@/components/ui/toaster";
+import { useConfirm } from "@/hooks/use-confirm";
 import { NovaMarcacaoDialog } from "@/components/dashboard/nova-marcacao-dialog";
 import { formatHora, formatPreco, toDateInputValue } from "@/lib/format";
 
@@ -47,6 +49,7 @@ export function AgendaView() {
   const [profissionalId, setProfissionalId] = useState("");
   const [carregando, setCarregando] = useState(true);
   const [nova, setNova] = useState(false);
+  const { confirm, dialog } = useConfirm();
 
   const [alvo, setAlvo] = useState<Agendamento | null>(null);
   const [modalHora, setModalHora] = useState<{
@@ -106,7 +109,13 @@ export function AgendaView() {
   }
 
   async function apagar(a: Agendamento) {
-    if (!window.confirm(`Apagar a marcação de ${a.cliente.nome}?`)) return;
+    const confirmado = await confirm({
+      title: "Apagar marcação?",
+      description: `Apagar a marcação de ${a.cliente.nome}?`,
+      confirmText: "Apagar",
+      variant: "danger",
+    });
+    if (!confirmado) return;
     const res = await fetch(`/api/agendamentos/${a.id}`, { method: "DELETE" });
     if (res.ok) {
       toast("Marcação apagada");
@@ -195,10 +204,15 @@ export function AgendaView() {
           </button>
         )}
         {profissionais.length > 0 && (
-          <select className="input !w-auto" value={profissionalId} onChange={(e) => setProfissionalId(e.target.value)} aria-label="Filtrar por profissional">
+          <Select
+            value={profissionalId}
+            onChange={setProfissionalId}
+            className="!w-auto"
+            aria-label="Filtrar por profissional"
+          >
             <option value="">Todos os profissionais</option>
             {profissionais.filter((p) => p.ativo).map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
-          </select>
+          </Select>
         )}
         <div className="ml-auto flex gap-2 text-sm">
           <span className="badge-gold">
@@ -254,16 +268,16 @@ export function AgendaView() {
                   >
                     <MessageCircle className="h-3.5 w-3.5" /> WhatsApp
                   </a>
-                  <select
-                    className="input !w-auto !py-1.5 !text-xs"
+                  <Select
                     value={a.status}
-                    onChange={(e) => mudarStatus(a, e.target.value)}
+                    onChange={(valor) => mudarStatus(a, valor)}
+                    className="!w-auto"
                   >
                     <option value="agendado">Agendado</option>
                     <option value="concluido">Concluir</option>
                     <option value="cancelado">Cancelar</option>
                     <option value="faltou">Faltou</option>
-                  </select>
+                  </Select>
                   <button className="btn-outline !py-1.5 !px-3 !text-xs" onClick={() => abrirHora(a, "editar")}>
                     Editar hora
                   </button>
@@ -357,6 +371,7 @@ export function AgendaView() {
         </div>
       </Dialog>
 
+      {dialog}
       <Toaster />
     </div>
   );

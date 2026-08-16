@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Repeat } from "lucide-react";
 import { toast, Toaster } from "@/components/ui/toaster";
+import { useConfirm } from "@/hooks/use-confirm";
 import { formatDataHora, nomeDiaSemana } from "@/lib/format";
 
 type Serie = {
@@ -36,6 +37,7 @@ export function RecorrentesView() {
   const [series, setSeries] = useState<Serie[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [aEnviar, setAEnviar] = useState<string | null>(null);
+  const { confirm, dialog } = useConfirm();
 
   const carregar = useCallback(async () => {
     try {
@@ -74,14 +76,14 @@ export function RecorrentesView() {
     }
   }
 
-  function cancelar(s: Serie) {
-    if (
-      !window.confirm(
-        `Cancelar a série recorrente de ${s.cliente.nome}? As ocorrências futuras serão canceladas.`,
-      )
-    ) {
-      return;
-    }
+  async function cancelar(s: Serie) {
+    const confirmado = await confirm({
+      title: "Cancelar série?",
+      description: `Cancelar a série recorrente de ${s.cliente.nome}? As ocorrências futuras serão canceladas.`,
+      confirmText: "Cancelar",
+      variant: "danger",
+    });
+    if (!confirmado) return;
     acao(s.id, `/api/series/${s.id}`, "Série cancelada");
   }
 
@@ -167,6 +169,7 @@ export function RecorrentesView() {
         </ul>
       )}
 
+      {dialog}
       <Toaster />
     </div>
   );

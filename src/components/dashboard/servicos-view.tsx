@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { Dialog } from "@/components/ui/dialog";
 import { toast, Toaster } from "@/components/ui/toaster";
+import { useConfirm } from "@/hooks/use-confirm";
 import { formatPreco } from "@/lib/format";
 
 type Servico = {
@@ -23,6 +24,7 @@ export function ServicosView() {
   const [editar, setEditar] = useState<Servico | null>(null);
   const [form, setForm] = useState(VAZIO);
   const [aEnviar, setAEnviar] = useState(false);
+  const { confirm, dialog } = useConfirm();
 
   const carregar = useCallback(async () => {
     try {
@@ -94,7 +96,13 @@ export function ServicosView() {
   }
 
   async function apagar(s: Servico) {
-    if (!window.confirm(`Apagar o serviço "${s.nome}"?`)) return;
+    const confirmado = await confirm({
+      title: "Apagar serviço?",
+      description: `Apagar o serviço "${s.nome}"?`,
+      confirmText: "Apagar",
+      variant: "danger",
+    });
+    if (!confirmado) return;
     const res = await fetch(`/api/servicos/${s.id}`, { method: "DELETE" });
     if (res.ok) {
       toast("Serviço apagado");
@@ -228,6 +236,7 @@ export function ServicosView() {
         </div>
       </Dialog>
 
+      {dialog}
       <Toaster />
     </div>
   );

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useConfirm } from "@/hooks/use-confirm";
 import { formatDataHora } from "@/lib/format";
 
 type Agendamento = {
@@ -16,6 +17,7 @@ export function GestaoMarcacao({ token, agendamento }: { token: string; agendame
   const [hora, setHora] = useState("");
   const [resultado, setResultado] = useState("");
   const [aEnviar, setAEnviar] = useState(false);
+  const { confirm, dialog } = useConfirm();
 
   async function enviar(body: Record<string, string>) {
     setAEnviar(true);
@@ -40,8 +42,23 @@ export function GestaoMarcacao({ token, agendamento }: { token: string; agendame
       {agendamento.status === "agendado" && !resultado.includes("cancelada") && !resultado.includes("reagendada") && <>
         <div className="mt-6 grid grid-cols-2 gap-3"><div><label className="label" htmlFor="mg-data">Nova data</label><input id="mg-data" type="date" className="input" min={new Date().toISOString().slice(0, 10)} value={data} onChange={(e) => setData(e.target.value)} /></div><div><label className="label" htmlFor="mg-hora">Nova hora</label><input id="mg-hora" type="time" className="input" value={hora} onChange={(e) => setHora(e.target.value)} /></div></div>
         <button className="btn-gold mt-5 w-full" disabled={aEnviar || !data || !hora} onClick={() => enviar({ data, hora })}>{aEnviar ? "A guardar…" : "Reagendar"}</button>
-        <button className="btn-danger mt-3 w-full" disabled={aEnviar} onClick={() => { if (window.confirm("Queres mesmo cancelar esta marcação?")) enviar({ acao: "cancelar" }); }}>Cancelar marcação</button>
+        <button
+          className="btn-danger mt-3 w-full"
+          disabled={aEnviar}
+          onClick={async () => {
+            const confirmado = await confirm({
+              title: "Cancelar marcação?",
+              description: "Queres mesmo cancelar esta marcação?",
+              confirmText: "Cancelar",
+              variant: "danger",
+            });
+            if (confirmado) enviar({ acao: "cancelar" });
+          }}
+        >
+          Cancelar marcação
+        </button>
       </>}
+      {dialog}
     </div>
   );
 }

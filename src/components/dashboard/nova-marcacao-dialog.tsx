@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Dialog } from "@/components/ui/dialog";
+import { Select } from "@/components/ui/select";
 import { toast } from "@/components/ui/toaster";
 import { DIAS_SEMANA, toDateInputValue } from "@/lib/format";
 import { diaDaSemana } from "@/lib/horarios";
@@ -96,43 +97,43 @@ function NovaMarcacaoForm({
 
   return (
     <div className="space-y-4">
-        <div>
-          <label className="label" htmlFor="nm-cliente">
-            Cliente
-          </label>
-          <select
-            id="nm-cliente"
-            className="input"
-            value={clienteId}
-            onChange={(e) => setClienteId(e.target.value)}
+        <Select
+          label="Cliente"
+          id="nm-cliente"
+          value={clienteId}
+          onChange={setClienteId}
+        >
+          <option value="">Escolhe o cliente</option>
+          {clientes.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.nome}
+            </option>
+          ))}
+        </Select>
+        {profissionais.length > 0 && (
+          <Select
+            label="Profissional"
+            id="nm-profissional"
+            value={profissionalId}
+            onChange={setProfissionalId}
           >
-            <option value="">Escolhe o cliente</option>
-            {clientes.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.nome}
-              </option>
-            ))}
-          </select>
-        </div>
-        {profissionais.length > 0 && <div><label className="label" htmlFor="nm-profissional">Profissional</label><select id="nm-profissional" className="input" value={profissionalId} onChange={(e) => setProfissionalId(e.target.value)}><option value="">Qualquer profissional</option>{profissionais.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}</select></div>}
-        <div>
-          <label className="label" htmlFor="nm-servico">
-            Serviço
-          </label>
-          <select
-            id="nm-servico"
-            className="input"
-            value={servicoId}
-            onChange={(e) => setServicoId(e.target.value)}
-          >
-            <option value="">Escolhe o serviço</option>
-            {servicos.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.nome} ({s.duracaoMin} min)
-              </option>
-            ))}
-          </select>
-        </div>
+            <option value="">Qualquer profissional</option>
+            {profissionais.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
+          </Select>
+        )}
+        <Select
+          label="Serviço"
+          id="nm-servico"
+          value={servicoId}
+          onChange={setServicoId}
+        >
+          <option value="">Escolhe o serviço</option>
+          {servicos.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.nome} ({s.duracaoMin} min)
+            </option>
+          ))}
+        </Select>
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="label" htmlFor="nm-data">
@@ -188,39 +189,29 @@ function NovaMarcacaoForm({
         </div>
         {repetir && (
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="label" htmlFor="nm-intervalo">
-                Repetir a cada
-              </label>
-              <select
-                id="nm-intervalo"
-                className="input"
-                value={intervaloSemanas}
-                onChange={(e) => setIntervaloSemanas(Number(e.target.value))}
-              >
-                <option value={1}>1 semana</option>
-                <option value={2}>2 semanas</option>
-                <option value={3}>3 semanas</option>
-                <option value={4}>4 semanas</option>
-              </select>
-            </div>
-            <div>
-              <label className="label" htmlFor="nm-dia">
-                Dia da semana
-              </label>
-              <select
-                id="nm-dia"
-                className="input"
-                value={diaSerie}
-                onChange={(e) => setDiaSerie(Number(e.target.value))}
-              >
-                {DIAS_SEMANA.map((d) => (
-                  <option key={d.valor} value={d.valor}>
-                    {d.nome}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <Select
+              label="Repetir a cada"
+              id="nm-intervalo"
+              value={intervaloSemanas}
+              onChange={(valor) => setIntervaloSemanas(Number(valor))}
+            >
+              <option value={1}>1 semana</option>
+              <option value={2}>2 semanas</option>
+              <option value={3}>3 semanas</option>
+              <option value={4}>4 semanas</option>
+            </Select>
+            <Select
+              label="Dia da semana"
+              id="nm-dia"
+              value={diaSerie}
+              onChange={(valor) => setDiaSerie(Number(valor))}
+            >
+              {DIAS_SEMANA.map((d) => (
+                <option key={d.valor} value={d.valor}>
+                  {d.nome}
+                </option>
+              ))}
+            </Select>
           </div>
         )}
         <div className="flex justify-end gap-2 pt-2">

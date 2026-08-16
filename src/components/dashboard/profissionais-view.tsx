@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Pencil, Plus, UserRound } from "lucide-react";
 import { Dialog } from "@/components/ui/dialog";
 import { toast, Toaster } from "@/components/ui/toaster";
+import { useConfirm } from "@/hooks/use-confirm";
 
 type Profissional = {
   id: string;
@@ -21,6 +22,7 @@ export function ProfissionaisView() {
   const [editar, setEditar] = useState<Profissional | null>(null);
   const [form, setForm] = useState(VAZIO);
   const [aEnviar, setAEnviar] = useState(false);
+  const { confirm, dialog } = useConfirm();
 
   const carregar = useCallback(async () => {
     const res = await fetch("/api/profissionais");
@@ -80,7 +82,13 @@ export function ProfissionaisView() {
   }
 
   async function desativar(profissional: Profissional) {
-    if (!window.confirm(`Desativar ${profissional.nome}? As marcações existentes serão preservadas.`)) return;
+    const confirmado = await confirm({
+      title: "Desativar profissional?",
+      description: `Desativar ${profissional.nome}? As marcações existentes serão preservadas.`,
+      confirmText: "Desativar",
+      variant: "danger",
+    });
+    if (!confirmado) return;
     const res = await fetch(`/api/profissionais/${profissional.id}`, { method: "DELETE" });
     if (res.ok) {
       toast("Profissional desativado");
@@ -131,6 +139,7 @@ export function ProfissionaisView() {
           <div className="flex justify-end gap-2 pt-2"><button type="button" className="btn-outline" onClick={() => setModal(false)}>Cancelar</button><button type="submit" className="btn-gold" disabled={aEnviar}>{aEnviar ? "A guardar…" : "Guardar profissional"}</button></div>
         </form>
       </Dialog>
+      {dialog}
       <Toaster />
     </div>
   );
