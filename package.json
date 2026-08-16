@@ -15,6 +15,7 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",
     "db:status": "prisma migrate status",
+    "predb:seed": "prisma generate",
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio"
   },
