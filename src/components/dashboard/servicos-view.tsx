@@ -13,12 +13,15 @@ type Servico = {
   precoCents: number;
   duracaoMin: number;
   ativo: boolean;
+  servicos: { profissional: { id: string; nome: string; ativo: boolean } }[];
 };
+type Profissional = { id: string; nome: string; ativo: boolean };
 
-const VAZIO = { nome: "", preco: "", duracao: "" };
+const VAZIO = { nome: "", preco: "", duracao: "", profissionalIds: [] as string[] };
 
 export function ServicosView() {
   const [servicos, setServicos] = useState<Servico[]>([]);
+  const [profissionais, setProfissionais] = useState<Profissional[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [modal, setModal] = useState(false);
   const [editar, setEditar] = useState<Servico | null>(null);
@@ -28,10 +31,10 @@ export function ServicosView() {
 
   const carregar = useCallback(async () => {
     try {
-      const res = await fetch("/api/servicos");
-      const json = await res.json();
-      if (!res.ok || !Array.isArray(json)) throw new Error("Resposta inválida");
-      setServicos(json);
+      const [res, profissionaisRes] = await Promise.all([fetch("/api/servicos"), fetch("/api/profissionais")]);
+      const [json, profissionaisJson] = await Promise.all([res.json(), profissionaisRes.json()]);
+      if (!res.ok || !profissionaisRes.ok || !Array.isArray(json) || !Array.isArray(profissionaisJson)) throw new Error("Resposta inválida");
+      setServicos(json); setProfissionais(profissionaisJson);
     } catch {
       toast("Erro ao carregar serviços", "erro");
     } finally {
@@ -56,6 +59,7 @@ export function ServicosView() {
       nome: s.nome,
       preco: String(s.precoCents),
       duracao: String(s.duracaoMin),
+      profissionalIds: s.servicos.map((item) => item.profissional.id),
     });
     setModal(true);
   }
@@ -79,6 +83,7 @@ export function ServicosView() {
             precoCents,
             duracaoMin,
             ativo: true,
+            profissionalIds: form.profissionalIds,
           }),
         },
       );
@@ -199,6 +204,7 @@ export function ServicosView() {
               placeholder="Ex.: Corte + Barba"
             />
           </div>
+          {profissionais.some((p) => p.ativo) && <fieldset><legend className="label">Profissionais habilitados</legend><p className="mb-2 text-xs text-muted">Sem seleção, o serviço fica disponível para todos.</p><div className="space-y-2 rounded-sm border border-line bg-bg p-3">{profissionais.filter((p) => p.ativo).map((p) => <label key={p.id} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.profissionalIds.includes(p.id)} onChange={(e) => setForm({ ...form, profissionalIds: e.target.checked ? [...form.profissionalIds, p.id] : form.profissionalIds.filter((id) => id !== p.id) })} />{p.nome}</label>)}</div></fieldset>}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="label" htmlFor="sv-preco">

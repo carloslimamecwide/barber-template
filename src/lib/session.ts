@@ -5,6 +5,7 @@ import { serverEnv } from "@/lib/env";
 export type SessionData = {
   userId?: string;
   email?: string;
+  role?: "admin" | "rececao" | "profissional";
 };
 
 export const sessionOptions: SessionOptions = {

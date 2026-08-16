@@ -8,12 +8,13 @@ import {
   type HorarioDia,
   type Ocupacao,
 } from "@/lib/horarios";
+import { obterConfiguracao } from "@/lib/configuracao";
 
 type Db = typeof prisma | Prisma.TransactionClient;
 
 export class DisponibilidadeError extends Error {
   constructor(
-    public readonly code: "FECHADO" | "PASSADO" | "OCUPADO" | "FORA_DO_HORARIO" | "PROFISSIONAL_INATIVO",
+    public readonly code: "FECHADO" | "PASSADO" | "OCUPADO" | "FORA_DO_HORARIO" | "PROFISSIONAL_INATIVO" | "AUSENTE" | "FORA_DO_HORIZONTE",
     message: string,
   ) {
     super(message);
@@ -60,6 +61,17 @@ export async function obterHorarioDoDia(data: string, db: Db = prisma): Promise<
   };
 }
 
+export async function obterHorarioDoProfissional(data: string, profissionalId: string, db: Db = prisma): Promise<HorarioDia> {
+  const global = await obterHorarioDoDia(data, db);
+  if (!global.aberto) return global;
+  const horario = await db.horarioProfissional.findUnique({
+    where: { profissionalId_diaDaSemana: { profissionalId, diaDaSemana: diaDaSemana(data) } },
+  });
+  if (!horario) return global;
+  if (!horario.ativo) return { aberto: false, abertura: null, fecho: null, pausaInicio: null, pausaFim: null };
+  return { aberto: true, abertura: horario.abertura, fecho: horario.fecho, pausaInicio: horario.pausaInicio, pausaFim: horario.pausaFim };
+}
+
 export async function slotsDoProfissional(input: {
   data: string;
   duracaoMin: number;
@@ -69,14 +81,21 @@ export async function slotsDoProfissional(input: {
   db?: Db;
 }) {
   const db = input.db ?? prisma;
-  const horario = await obterHorarioDoDia(input.data, db);
-  const ocupacoes = await obterOcupacoesDoDia(input.data, input.excluirId, input.profissionalId, db);
+  const horario = await obterHorarioDoProfissional(input.data, input.profissionalId, db);
+  const ocupacoesBase = await obterOcupacoesDoDia(input.data, input.excluirId, input.profissionalId, db);
+  const configuracao = await obterConfiguracao(db);
+  const ausencias = await db.ausenciaProfissional.findMany({
+    where: { profissionalId: input.profissionalId, inicio: { lt: combineDateAndTime(input.data, "23:59") }, fim: { gt: combineDateAndTime(input.data, "00:00") } },
+    select: { inicio: true, fim: true },
+  });
+  const ocupacoes = [...ocupacoesBase, ...ausencias];
   return gerarSlots({
     data: input.data,
     duracaoMin: input.duracaoMin,
     horario,
     ocupacoes,
-    agora: input.agora,
+    agora: input.agora ?? new Date(Date.now() + configuracao.antecedenciaMinHoras * 60 * 60_000),
+    intervaloMin: configuracao.intervaloSlotsMin,
   });
 }
 
@@ -96,8 +115,12 @@ export async function validarSlot(input: {
   }
 
   const inicio = combineDateAndTime(input.data, input.hora);
-  if (inicio <= new Date() && !input.permitirExcecao) {
-    throw new DisponibilidadeError("PASSADO", "A data/hora tem de estar no futuro");
+  const configuracao = await obterConfiguracao(db);
+  if (inicio <= new Date(Date.now() + configuracao.antecedenciaMinHoras * 60 * 60_000) && !input.permitirExcecao) {
+    throw new DisponibilidadeError("PASSADO", "A data/hora tem de respeitar a antecedência mínima");
+  }
+  if (inicio > new Date(Date.now() + configuracao.horizonteDias * 24 * 60 * 60_000) && !input.permitirExcecao) {
+    throw new DisponibilidadeError("FORA_DO_HORIZONTE", "A data fica além do horizonte permitido para reservas");
   }
 
   const ocupacoes = await obterOcupacoesDoDia(input.data, input.excluirId, input.profissionalId, db);
@@ -107,12 +130,20 @@ export async function validarSlot(input: {
     throw new DisponibilidadeError("OCUPADO", "Esta hora já está ocupada");
   }
 
-  const horario = await obterHorarioDoDia(input.data, db);
+  const ausencia = await db.ausenciaProfissional.findFirst({
+    where: { profissionalId: input.profissionalId, inicio: { lt: fim }, fim: { gt: inicio } },
+  });
+  if (ausencia && !input.permitirExcecao) {
+    throw new DisponibilidadeError("AUSENTE", "O profissional está indisponível neste período");
+  }
+
+  const horario = await obterHorarioDoProfissional(input.data, input.profissionalId, db);
   const slotRegular = gerarSlots({
     data: input.data,
     duracaoMin: input.duracaoMin,
     horario,
     ocupacoes: [],
+    intervaloMin: configuracao.intervaloSlotsMin,
   }).includes(input.hora);
   if (!slotRegular && !input.permitirExcecao) {
     throw new DisponibilidadeError(

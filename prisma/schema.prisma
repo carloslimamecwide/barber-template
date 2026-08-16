@@ -23,8 +23,13 @@ enum StatusProposta {
 
 enum SerieEstado {
   ativa
-  bloqueada
   cancelada
+}
+
+enum UserRole {
+  admin
+  rececao
+  profissional
 }
 
 enum TipoNotificacao {
@@ -41,25 +46,33 @@ enum EstadoNotificacao {
 }
 
 model User {
-  id               String    @id @default(cuid())
-  email            String    @unique
+  id               String        @id @default(cuid())
+  email            String        @unique
   passwordHash     String
-  ativo            Boolean   @default(true)
-  tentativasFalhas Int       @default(0)
-  bloqueadoAte     DateTime? @db.Timestamptz(3)
-  createdAt        DateTime  @default(now()) @db.Timestamptz(3)
+  ativo            Boolean       @default(true)
+  tentativasFalhas Int           @default(0)
+  bloqueadoAte     DateTime?     @db.Timestamptz(3)
+  role             UserRole      @default(admin)
+  profissionalId   String?       @unique
+  createdAt        DateTime      @default(now()) @db.Timestamptz(3)
+  profissional     Profissional? @relation(fields: [profissionalId], references: [id], onDelete: SetNull)
+  auditorias       AuditLog[]
 }
 
 model Profissional {
-  id           String            @id @default(cuid())
+  id           String                 @id @default(cuid())
   nome         String
   telefone     String?
   email        String?
-  ativo        Boolean           @default(true)
-  ordem        Int               @default(0)
-  criadoEm     DateTime          @default(now()) @db.Timestamptz(3)
+  ativo        Boolean                @default(true)
+  ordem        Int                    @default(0)
+  criadoEm     DateTime               @default(now()) @db.Timestamptz(3)
   agendamentos Agendamento[]
   series       SerieRecorrente[]
+  utilizador   User?
+  horarios     HorarioProfissional[]
+  ausencias    AusenciaProfissional[]
+  servicos     ServicoProfissional[]
 
   @@index([ativo, ordem])
 }
@@ -80,13 +93,14 @@ model Cliente {
 }
 
 model Servico {
-  id           String            @id @default(cuid())
+  id           String                @id @default(cuid())
   nome         String
   precoCents   Int
   duracaoMin   Int
-  ativo        Boolean           @default(true)
+  ativo        Boolean               @default(true)
   agendamentos Agendamento[]
   series       SerieRecorrente[]
+  servicos     ServicoProfissional[]
 
   @@index([ativo, nome])
 }
@@ -102,6 +116,9 @@ model Agendamento {
   duracaoAgendadaMin  Int
   notas               String?
   criadoEm            DateTime                @default(now()) @db.Timestamptz(3)
+  atualizadoEm        DateTime                @updatedAt @db.Timestamptz(3)
+  versao              Int                     @default(1)
+  motivoStatus        String?
   tokenGestaoHash     String?                 @unique
   tokenGestaoExpiraEm DateTime?               @db.Timestamptz(3)
   serieId             String?
@@ -115,6 +132,7 @@ model Agendamento {
   serie               SerieRecorrente?        @relation(fields: [serieId], references: [id], onDelete: SetNull)
   propostas           PropostaReagendamento[]
   notificacoes        Notificacao[]
+  idempotencia        Idempotencia?
 
   @@unique([serieId, dataHora])
   @@index([dataHora])
@@ -151,8 +169,6 @@ model SerieRecorrente {
   intervaloSemanas Int            @default(1)
   dataInicio       DateTime       @db.Date
   estado           SerieEstado    @default(ativa)
-  motivoBloqueio   String?
-  bloqueadaEm      DateTime?      @db.Timestamptz(3)
   canceladaEm      DateTime?      @db.Timestamptz(3)
   criadaEm         DateTime       @default(now()) @db.Timestamptz(3)
   cliente          Cliente        @relation(fields: [clienteId], references: [id], onDelete: Restrict)
@@ -212,4 +228,102 @@ model DiaFechado {
   id     String   @id @default(cuid())
   data   DateTime @unique @db.Date
   motivo String?
+}
+
+model ConfiguracaoBarbearia {
+  id                   String   @id @default("principal")
+  nome                 String   @default("Barbearia Nobre")
+  timezone             String   @default("Europe/Lisbon")
+  intervaloSlotsMin    Int      @default(15)
+  antecedenciaMinHoras Int      @default(2)
+  horizonteDias        Int      @default(90)
+  cancelamentoMinHoras Int      @default(24)
+  lembreteHoras        Int      @default(24)
+  atualizadoEm         DateTime @updatedAt @db.Timestamptz(3)
+}
+
+model HorarioProfissional {
+  id             String       @id @default(cuid())
+  profissionalId String
+  diaDaSemana    Int
+  ativo          Boolean      @default(true)
+  abertura       String
+  fecho          String
+  pausaInicio    String?
+  pausaFim       String?
+  profissional   Profissional @relation(fields: [profissionalId], references: [id], onDelete: Cascade)
+
+  @@unique([profissionalId, diaDaSemana])
+  @@index([profissionalId, ativo])
+}
+
+model AusenciaProfissional {
+  id             String       @id @default(cuid())
+  profissionalId String
+  inicio         DateTime     @db.Timestamptz(3)
+  fim            DateTime     @db.Timestamptz(3)
+  motivo         String?
+  criadoEm       DateTime     @default(now()) @db.Timestamptz(3)
+  profissional   Profissional @relation(fields: [profissionalId], references: [id], onDelete: Cascade)
+
+  @@index([profissionalId, inicio, fim])
+}
+
+model ServicoProfissional {
+  profissionalId String
+  servicoId      String
+  precoCents     Int?
+  duracaoMin     Int?
+  profissional   Profissional @relation(fields: [profissionalId], references: [id], onDelete: Cascade)
+  servico        Servico      @relation(fields: [servicoId], references: [id], onDelete: Cascade)
+
+  @@id([profissionalId, servicoId])
+  @@index([servicoId])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  acao       String
+  entidade   String
+  entidadeId String?
+  dados      Json?
+  ip         String?
+  criadoEm   DateTime @default(now()) @db.Timestamptz(3)
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([entidade, entidadeId])
+  @@index([criadoEm])
+  @@index([userId, criadoEm])
+}
+
+model Idempotencia {
+  chave         String       @id
+  requestHash   String
+  agendamentoId String?      @unique
+  criadaEm      DateTime     @default(now()) @db.Timestamptz(3)
+  expiraEm      DateTime     @db.Timestamptz(3)
+  agendamento   Agendamento? @relation(fields: [agendamentoId], references: [id], onDelete: Cascade)
+
+  @@index([expiraEm])
+}
+
+model LimiteAcesso {
+  chave        String   @id
+  tentativas   Int      @default(0)
+  janelaInicio DateTime @default(now()) @db.Timestamptz(3)
+  expiraEm     DateTime @db.Timestamptz(3)
+
+  @@index([expiraEm])
+}
+
+model ExecucaoCron {
+  id        String    @id @default(cuid())
+  inicio    DateTime  @default(now()) @db.Timestamptz(3)
+  fim       DateTime? @db.Timestamptz(3)
+  sucesso   Boolean?
+  resultado Json?
+  erro      String?
+
+  @@index([inicio])
 }

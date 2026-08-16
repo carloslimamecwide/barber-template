@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Pencil, Plus, UserRound } from "lucide-react";
+import Link from "next/link";
 import { Dialog } from "@/components/ui/dialog";
 import { toast, Toaster } from "@/components/ui/toaster";
 import { useConfirm } from "@/hooks/use-confirm";
@@ -133,7 +134,7 @@ export function ProfissionaisView() {
                   <td className="px-5 py-3 text-muted">{p.telefone ?? "—"}</td>
                   <td className="px-5 py-3 text-muted">{p.email ?? "—"}</td>
                   <td className="px-5 py-3">{p.ativo ? <span className="badge-green">Ativo</span> : <span className="badge-gray">Inativo</span>}</td>
-                  <td className="px-5 py-3"><div className="flex justify-end gap-1"><button className="btn-ghost !p-2" onClick={() => abrirEdicao(p)} aria-label={`Editar ${p.nome}`}><Pencil className="h-4 w-4" /></button>{p.ativo ? <button className="btn-danger !py-1.5 !px-3 !text-xs" onClick={() => desativar(p)}>Desativar</button> : <button className="btn-outline !py-1.5 !px-3 !text-xs" onClick={() => reativar(p)}>Reativar</button>}</div></td>
+                  <td className="px-5 py-3"><div className="flex justify-end gap-1"><Link className="btn-outline !px-3 !py-1.5 !text-xs" href={`/dashboard/profissionais/${p.id}`}>Disponibilidade</Link><button className="btn-ghost !p-2" onClick={() => abrirEdicao(p)} aria-label={`Editar ${p.nome}`}><Pencil className="h-4 w-4" /></button>{p.ativo ? <button className="btn-danger !py-1.5 !px-3 !text-xs" onClick={() => desativar(p)}>Desativar</button> : <button className="btn-outline !py-1.5 !px-3 !text-xs" onClick={() => reativar(p)}>Reativar</button>}</div></td>
                 </tr>
               ))}
             </tbody>

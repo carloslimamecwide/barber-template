@@ -1,11 +1,11 @@
 import { Scissors } from "lucide-react";
 import Link from "next/link";
 import { getSession } from "@/lib/session";
-import { prisma } from "@/lib/prisma";
 import { LogoutButton } from "@/components/dashboard/logout-button";
 import { SidebarNav } from "@/components/dashboard/sidebar-nav";
 import { redirect } from "next/navigation";
 import { requireAuth } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 
 export default async function DashboardLayout({
   children,
@@ -15,9 +15,12 @@ export default async function DashboardLayout({
   const auth = await requireAuth();
   if (!auth) redirect("/login");
   const session = await getSession();
-  const bloqueadas = await prisma.serieRecorrente.count({
-    where: { estado: "bloqueada" },
-  });
+  const [profissionais, servicos, horarios] = await Promise.all([
+    prisma.profissional.count({ where: { ativo: true } }),
+    prisma.servico.count({ where: { ativo: true } }),
+    prisma.horarioFuncionamento.count({ where: { aberto: true } }),
+  ]);
+  const configuracaoPendente = profissionais === 0 || servicos === 0 || horarios === 0;
 
   return (
     <div className="flex min-h-screen">
@@ -28,7 +31,7 @@ export default async function DashboardLayout({
             Barbearia <span className="text-ink">Nobre</span>
           </span>
         </div>
-        <SidebarNav />
+        <SidebarNav role={auth.role} />
         <div className="border-t border-line p-3">
           <p className="truncate px-3 pb-2 text-xs text-muted">
             {session.email}
@@ -37,18 +40,15 @@ export default async function DashboardLayout({
         </div>
       </aside>
       <main className="ml-60 flex-1 p-6 sm:p-8">
-        {bloqueadas > 0 && (
-          <Link
-            href="/dashboard/recorrentes"
-            className="mb-6 flex items-center justify-between rounded-sm border border-gold/40 bg-gold/10 px-4 py-3 text-sm text-gold"
-          >
-            <span>
-              {bloqueadas === 1
-                ? "1 série recorrente bloqueada por conflito."
-                : `${bloqueadas} séries recorrentes bloqueadas por conflito.`}
-            </span>
-            <span className="font-semibold">Ver detalhes</span>
-          </Link>
+        {configuracaoPendente && auth.role !== "profissional" && (
+          <aside className="mb-6 rounded-sm border border-gold/40 bg-gold/10 px-5 py-4" aria-label="Configuração inicial">
+            <p className="font-semibold text-gold">Conclui a configuração inicial</p>
+            <div className="mt-2 flex flex-wrap gap-x-5 gap-y-2 text-sm">
+              <Link className={profissionais ? "text-success" : "text-ink underline"} href="/dashboard/profissionais">{profissionais ? "✓" : "1."} Criar profissional</Link>
+              <Link className={servicos ? "text-success" : "text-ink underline"} href="/dashboard/servicos">{servicos ? "✓" : "2."} Criar serviço</Link>
+              <Link className={horarios ? "text-success" : "text-ink underline"} href="/dashboard/horarios">{horarios ? "✓" : "3."} Definir horário</Link>
+            </div>
+          </aside>
         )}
         {children}
       </main>

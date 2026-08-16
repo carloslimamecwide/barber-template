@@ -7,7 +7,7 @@ import { Select } from "@/components/ui/select";
 import { toast, Toaster } from "@/components/ui/toaster";
 import { useConfirm } from "@/hooks/use-confirm";
 import { NovaMarcacaoDialog } from "@/components/dashboard/nova-marcacao-dialog";
-import { formatHora, formatPreco, toDateInputValue } from "@/lib/format";
+import { formatDataHora, formatHora, formatPreco, toDateInputValue } from "@/lib/format";
 import { messageFromResponse } from "@/lib/http";
 
 type Agendamento = {
@@ -15,6 +15,7 @@ type Agendamento = {
   dataHora: string;
   status: "agendado" | "concluido" | "cancelado" | "faltou";
   precoCobrado: number;
+  versao: number;
   nota?: string;
   propostas: { id: string; novaDataHora: string }[];
   notificacoes: { id: string; estado: string; tipo: string }[];
@@ -48,6 +49,9 @@ export function AgendaView() {
   const [servicos, setServicos] = useState<Servico[]>([]);
   const [profissionais, setProfissionais] = useState<Profissional[]>([]);
   const [profissionalId, setProfissionalId] = useState("");
+  const [vista, setVista] = useState<"dia" | "semana">("dia");
+  const [search, setSearch] = useState("");
+  const [statusFiltro, setStatusFiltro] = useState("");
   const [carregando, setCarregando] = useState(true);
   const [nova, setNova] = useState(false);
   const { confirm, dialog } = useConfirm();
@@ -59,11 +63,18 @@ export function AgendaView() {
   const [horaData, setHoraData] = useState("");
   const [horaHora, setHoraHora] = useState("");
   const [aEnviar, setAEnviar] = useState(false);
+  const [overrideMessage, setOverrideMessage] = useState("");
+  const [overrideReason, setOverrideReason] = useState("");
+  const [statusEdit, setStatusEdit] = useState<{ agendamento: Agendamento; status: Agendamento["status"]; motivo: string } | null>(null);
 
   const carregar = useCallback(async (d: string) => {
     try {
-      const params = new URLSearchParams({ data: d });
+      const params = vista === "semana"
+        ? new URLSearchParams({ from: d, to: deslocarDia(d, 6) })
+        : new URLSearchParams({ data: d });
       if (profissionalId) params.set("profissionalId", profissionalId);
+      if (search.trim()) params.set("search", search.trim());
+      if (statusFiltro) params.set("status", statusFiltro);
       const res = await fetch(`/api/agendamentos?${params.toString()}`);
       const json = await res.json();
       if (!res.ok || !Array.isArray(json)) throw new Error(messageFromResponse(json, "Erro ao carregar agenda"));
@@ -73,7 +84,7 @@ export function AgendaView() {
     } finally {
       setCarregando(false);
     }
-  }, [profissionalId]);
+  }, [profissionalId, search, statusFiltro, vista]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -96,15 +107,16 @@ export function AgendaView() {
       });
   }, []);
 
-  async function mudarStatus(a: Agendamento, status: string) {
+  async function mudarStatus(a: Agendamento, status: Agendamento["status"], motivoStatus?: string) {
     const res = await fetch(`/api/agendamentos/${a.id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status }),
+      body: JSON.stringify({ status, motivoStatus, versao: a.versao }),
     });
     if (res.ok) {
       toast(`Marcação marcada como "${status}"`);
       carregar(data);
+      setStatusEdit(null);
     } else {
       toast("Não foi possível atualizar", "erro");
     }
@@ -138,6 +150,8 @@ export function AgendaView() {
     const d = new Date(a.dataHora);
     setHoraData(toDateInputValue(d));
     setHoraHora(`${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`);
+    setOverrideMessage("");
+    setOverrideReason("");
     setModalHora({ tipo });
   }
 
@@ -158,15 +172,7 @@ export function AgendaView() {
       if (!res.ok) {
         const code = json?.error?.code;
         if (code === "OVERRIDE_REQUIRED" && modalHora?.tipo === "editar") {
-          const confirmado = await confirm({
-            title: "Criar exceção ao horário?",
-            description: messageFromResponse(json, "A hora não cumpre as regras normais."),
-            confirmText: "Criar exceção",
-          });
-          if (confirmado) {
-            const motivo = window.prompt("Indica o motivo da exceção:")?.trim();
-            if (motivo) await guardarHora(true, motivo);
-          }
+          setOverrideMessage(messageFromResponse(json, "A hora não cumpre as regras normais."));
           return;
         }
         toast(messageFromResponse(json, "Não foi possível guardar"), "erro");
@@ -179,6 +185,8 @@ export function AgendaView() {
       );
       setModalHora(null);
       setAlvo(null);
+      setOverrideMessage("");
+      setOverrideReason("");
       carregar(data);
     } catch {
       toast("Erro de ligação", "erro");
@@ -197,7 +205,7 @@ export function AgendaView() {
         <div>
           <p className="eyebrow">Agenda</p>
           <h1 className="mt-2 font-display text-4xl font-semibold">
-            Marcações do dia
+            {vista === "semana" ? "Marcações da semana" : "Marcações do dia"}
           </h1>
         </div>
         <button className="btn-gold" onClick={() => setNova(true)}>
@@ -207,7 +215,7 @@ export function AgendaView() {
       </div>
 
       <div className="mb-6 flex flex-wrap items-center gap-3">
-        <button className="btn-outline !px-3" onClick={() => setData((d) => deslocarDia(d, -1))}>
+        <button className="btn-outline !px-3" onClick={() => setData((d) => deslocarDia(d, vista === "semana" ? -7 : -1))}>
           <ChevronLeft className="h-4 w-4" />
         </button>
         <input
@@ -216,7 +224,7 @@ export function AgendaView() {
           value={data}
           onChange={(e) => setData(e.target.value)}
         />
-        <button className="btn-outline !px-3" onClick={() => setData((d) => deslocarDia(d, 1))}>
+        <button className="btn-outline !px-3" onClick={() => setData((d) => deslocarDia(d, vista === "semana" ? 7 : 1))}>
           <ChevronRight className="h-4 w-4" />
         </button>
         {data !== toDateInputValue(new Date()) && (
@@ -235,6 +243,8 @@ export function AgendaView() {
             {profissionais.filter((p) => p.ativo).map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
           </Select>
         )}
+        <Select value={vista} onChange={(value) => setVista(value as "dia" | "semana")} className="!w-auto" aria-label="Vista da agenda"><option value="dia">Dia</option><option value="semana">Semana</option></Select>
+        <Select value={statusFiltro} onChange={setStatusFiltro} className="!w-auto" aria-label="Filtrar por estado"><option value="">Todos os estados</option><option value="agendado">Agendado</option><option value="concluido">Concluído</option><option value="cancelado">Cancelado</option><option value="faltou">Faltou</option></Select>
         <div className="ml-auto flex gap-2 text-sm">
           <span className="badge-gold">
             {agendamentos.filter((a) => a.status === "agendado").length} por atender
@@ -242,6 +252,7 @@ export function AgendaView() {
           <span className="badge-green">Faturado {formatPreco(faturacao)}</span>
         </div>
       </div>
+      <search className="mb-5 block max-w-md"><label className="label" htmlFor="agenda-search">Pesquisar agenda</label><input id="agenda-search" type="search" className="input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Cliente, telefone ou serviço" /></search>
 
       {carregando ? (
         <p className="text-muted">A carregar…</p>
@@ -256,7 +267,7 @@ export function AgendaView() {
             return (
               <li key={a.id} className="card flex flex-wrap items-center gap-x-6 gap-y-3 px-5 py-4">
                 <div className="w-16 shrink-0 font-display text-2xl font-semibold text-gold">
-                  {formatHora(a.dataHora)}
+                  {vista === "semana" ? <span className="text-base">{formatDataHora(a.dataHora)}</span> : formatHora(a.dataHora)}
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-semibold text-ink">
@@ -294,7 +305,12 @@ export function AgendaView() {
                   </a>
                   <Select
                     value={a.status}
-                    onChange={(valor) => mudarStatus(a, valor)}
+                    onChange={(valor) => {
+                      const status = valor as Agendamento["status"];
+                      if (status === a.status) return;
+                      if (status === "cancelado" || status === "faltou") setStatusEdit({ agendamento: a, status, motivo: "" });
+                      else void mudarStatus(a, status);
+                    }}
                     className="!w-auto"
                   >
                     <option value="agendado">Agendado</option>
@@ -374,6 +390,13 @@ export function AgendaView() {
               ? "O cliente recebe um email com um link para confirmar ou recusar."
               : "A hora é alterada de imediato, sem email."}
           </p>
+          {overrideMessage && modalHora?.tipo === "editar" && (
+            <div className="space-y-3 rounded-sm border border-gold/40 bg-gold/10 p-4">
+              <p className="text-sm text-gold">{overrideMessage}</p>
+              <div><label className="label" htmlFor="hh-override-reason">Motivo obrigatório da exceção</label><input id="hh-override-reason" className="input" minLength={3} value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)} /></div>
+              <button type="button" className="btn-gold" disabled={aEnviar || overrideReason.trim().length < 3} onClick={() => guardarHora(true, overrideReason.trim())}>Guardar como exceção</button>
+            </div>
+          )}
           <div className="flex justify-end gap-2 pt-2">
             <button
               className="btn-outline"
@@ -393,6 +416,10 @@ export function AgendaView() {
             </button>
           </div>
         </div>
+      </Dialog>
+
+      <Dialog open={statusEdit !== null} onClose={() => setStatusEdit(null)} title={statusEdit?.status === "faltou" ? "Registar falta" : "Cancelar marcação"}>
+        {statusEdit && <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); void mudarStatus(statusEdit.agendamento, statusEdit.status, statusEdit.motivo.trim()); }}><p className="text-sm text-muted">{statusEdit.agendamento.cliente.nome} · {statusEdit.agendamento.servico.nome}</p><div><label className="label" htmlFor="status-motivo">Motivo obrigatório</label><textarea id="status-motivo" className="input min-h-24" minLength={3} required value={statusEdit.motivo} onChange={(e) => setStatusEdit({ ...statusEdit, motivo: e.target.value })} /></div><div className="flex justify-end gap-2"><button type="button" className="btn-outline" onClick={() => setStatusEdit(null)}>Voltar</button><button type="submit" className="btn-danger" disabled={statusEdit.motivo.trim().length < 3}>Confirmar</button></div></form>}
       </Dialog>
 
       {dialog}

@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { requireAuth } from "@/lib/auth";
+import { requireStaff } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { dateOnlyToDate } from "@/lib/horarios";
 import { serieSchema } from "@/lib/validations";
 import { gerarOcorrenciasSerie } from "@/lib/series";
 
 export async function POST(request: Request) {
-  if (!(await requireAuth())) {
+  if (!(await requireStaff())) {
     return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   }
   const body = await request.json().catch(() => null);
@@ -42,7 +42,7 @@ export async function POST(request: Request) {
 }
 
 export async function GET() {
-  if (!(await requireAuth())) {
+  if (!(await requireStaff())) {
     return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   }
   const agora = new Date();

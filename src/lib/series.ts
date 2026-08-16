@@ -75,11 +75,3 @@ export async function cancelarSerie(serieId: string, agora = new Date()) {
     prisma.agendamento.updateMany({ where: { serieId, dataHora: { gt: agora }, status: "agendado" }, data: { status: "cancelado" } }),
   ]);
 }
-
-export async function retomarSerie(serieId: string, agora = new Date()) {
-  await prisma.serieRecorrente.updateMany({
-    where: { id: serieId, estado: "bloqueada" },
-    data: { estado: "ativa", motivoBloqueio: null, bloqueadaEm: null },
-  });
-  return gerarOcorrenciasSerie(serieId, agora);
-}

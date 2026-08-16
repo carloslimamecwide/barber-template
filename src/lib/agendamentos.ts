@@ -19,28 +19,41 @@ export async function criarAgendamento(input: {
   serieId?: string;
 }) {
   return transacaoSerializavel(async (tx) => {
-    const servico = await tx.servico.findUnique({ where: { id: input.servicoId } });
+    const servico = await tx.servico.findUnique({ where: { id: input.servicoId }, include: { servicos: true } });
     if (!servico?.ativo) throw new Error("SERVICO_INATIVO");
+    const habilitados = servico.servicos.map((item) => item.profissionalId);
+    const filtroProfissionais = input.profissionalId
+      ? (!habilitados.length || habilitados.includes(input.profissionalId) ? [input.profissionalId] : [])
+      : habilitados;
     const profissionais = await tx.profissional.findMany({
-      where: { ativo: true, ...(input.profissionalId ? { id: input.profissionalId } : {}) },
+      where: {
+        ativo: true,
+        ...(input.profissionalId || habilitados.length ? { id: { in: filtroProfissionais } } : {}),
+      },
       orderBy: [{ ordem: "asc" }, { nome: "asc" }],
     });
     if (!profissionais.length) throw new Error("SEM_PROFISSIONAIS");
 
     let escolhido: (typeof profissionais)[number] | undefined;
     let dataHora: Date | undefined;
+    let duracaoMin = servico.duracaoMin;
+    let precoCents = servico.precoCents;
     let ultimoErro: unknown;
     for (const candidato of profissionais) {
       try {
+        const personalizacao = servico.servicos.find((item) => item.profissionalId === candidato.id);
+        const duracaoCandidato = personalizacao?.duracaoMin ?? servico.duracaoMin;
         dataHora = await validarSlot({
           data: input.data,
           hora: input.hora,
-          duracaoMin: servico.duracaoMin,
+          duracaoMin: duracaoCandidato,
           profissionalId: candidato.id,
           permitirExcecao: input.permitirExcecao,
           db: tx,
         });
         escolhido = candidato;
+        duracaoMin = duracaoCandidato;
+        precoCents = personalizacao?.precoCents ?? servico.precoCents;
         break;
       } catch (error) {
         ultimoErro = error;
@@ -87,8 +100,8 @@ export async function criarAgendamento(input: {
         servicoId: servico.id,
         profissionalId: escolhido.id,
         dataHora,
-        precoCobrado: servico.precoCents,
-        duracaoAgendadaMin: servico.duracaoMin,
+        precoCobrado: precoCents,
+        duracaoAgendadaMin: duracaoMin,
         notas: input.notas,
         tokenGestaoHash: gestao?.hash,
         tokenGestaoExpiraEm: gestao ? new Date(Date.now() + 90 * 24 * 60 * 60 * 1000) : null,
@@ -110,7 +123,7 @@ export async function criarAgendamento(input: {
           nome,
           servico: servico.nome,
           dataHora: dataHora.toISOString(),
-          precoCents: servico.precoCents,
+          precoCents,
           tokenGestao: gestao.token,
         },
       });
@@ -146,6 +159,7 @@ export async function moverAgendamento(input: {
       where: { id: atual.id },
       data: {
         dataHora,
+        versao: { increment: 1 },
         excecaoManual: Boolean(input.permitirExcecao),
         motivoExcecao: input.permitirExcecao ? input.motivoExcecao : null,
       },

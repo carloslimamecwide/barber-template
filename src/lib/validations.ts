@@ -30,6 +30,7 @@ export const servicoSchema = z.object({
   precoCents: z.coerce.number().int().positive(erro("Preço inválido")),
   duracaoMin: z.coerce.number().int().positive(erro("Duração inválida")),
   ativo: z.boolean().optional(),
+  profissionalIds: z.array(z.string().min(1)).optional(),
 });
 
 export const profissionalSchema = z.object({
@@ -65,6 +66,10 @@ export const agendamentoManualSchema = z.object({
 
 export const statusSchema = z.object({
   status: z.enum(["agendado", "concluido", "cancelado", "faltou"]),
+  motivoStatus: z.string().trim().min(3, erro("Indica o motivo")).optional(),
+  versao: z.coerce.number().int().positive().optional(),
+}).superRefine((value, ctx) => {
+  if (["cancelado", "faltou"].includes(value.status) && !value.motivoStatus) ctx.addIssue({ code: "custom", path: ["motivoStatus"], message: "Indica o motivo" });
 });
 
 export const novaHoraSchema = z.object({
@@ -112,6 +117,39 @@ export const serieSchema = z.object({
   dataInicio: dataStringSchema,
 });
 
+export const configuracaoSchema = z.object({
+  nome: z.string().trim().min(2, erro("Nome muito curto")).max(100),
+  timezone: z.literal("Europe/Lisbon"),
+  intervaloSlotsMin: z.coerce.number().int().min(5).max(60),
+  antecedenciaMinHoras: z.coerce.number().int().min(0).max(168),
+  horizonteDias: z.coerce.number().int().min(7).max(730),
+  cancelamentoMinHoras: z.coerce.number().int().min(0).max(168),
+  lembreteHoras: z.coerce.number().int().min(1).max(168),
+});
+
+export const horarioProfissionalSchema = z.object({
+  diaDaSemana: z.coerce.number().int().min(0).max(6),
+  ativo: z.boolean(),
+  abertura: z.string().regex(/^\d{2}:\d{2}$/, erro("Abertura inválida")),
+  fecho: z.string().regex(/^\d{2}:\d{2}$/, erro("Fecho inválido")),
+  pausaInicio: z.string().regex(/^\d{2}:\d{2}$/).nullable().optional(),
+  pausaFim: z.string().regex(/^\d{2}:\d{2}$/).nullable().optional(),
+}).superRefine((value, ctx) => {
+  if (value.abertura >= value.fecho) ctx.addIssue({ code: "custom", message: "Abertura e fecho inválidos" });
+  if (Boolean(value.pausaInicio) !== Boolean(value.pausaFim)) ctx.addIssue({ code: "custom", message: "A pausa precisa de início e fim" });
+  if (value.pausaInicio && value.pausaFim && (value.pausaInicio >= value.pausaFim || value.pausaInicio < value.abertura || value.pausaFim > value.fecho)) {
+    ctx.addIssue({ code: "custom", message: "Pausa fora do horário" });
+  }
+});
+
+export const ausenciaSchema = z.object({
+  inicio: z.iso.datetime({ offset: true }),
+  fim: z.iso.datetime({ offset: true }),
+  motivo: z.string().trim().max(200).optional().transform((value) => value || null),
+}).superRefine((value, ctx) => {
+  if (new Date(value.inicio) >= new Date(value.fim)) ctx.addIssue({ code: "custom", message: "O fim deve ser posterior ao início" });
+});
+
 export type LoginInput = z.infer<typeof loginSchema>;
 export type ClienteInput = z.infer<typeof clienteSchema>;
 export type ServicoInput = z.infer<typeof servicoSchema>;
@@ -123,3 +161,4 @@ export type NovaHoraInput = z.infer<typeof novaHoraSchema>;
 export type HorarioInput = z.infer<typeof horarioSchema>;
 export type DiaFechadoInput = z.infer<typeof diaFechadoSchema>;
 export type SerieInput = z.infer<typeof serieSchema>;
+export type ConfiguracaoInput = z.infer<typeof configuracaoSchema>;

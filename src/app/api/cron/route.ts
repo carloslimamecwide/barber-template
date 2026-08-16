@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { combineDateAndTime, toDateOnlyString } from "@/lib/horarios";
 import { estenderSeries } from "@/lib/series";
 import { enfileirarNotificacao, processarNotificacoes } from "@/lib/notificacoes";
+import { obterConfiguracao } from "@/lib/configuracao";
+import { logger } from "@/lib/logger";
 
 export async function POST(request: Request) {
   const secret = request.headers.get("x-cron-secret");
@@ -10,12 +11,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   }
 
+  const execucao = await prisma.execucaoCron.create({ data: {} });
+  try {
   let lembretes = 0;
-  const hoje = toDateOnlyString(new Date());
-  const [ano, mes, dia] = hoje.split("-").map(Number);
-  const amanha = toDateOnlyString(new Date(Date.UTC(ano, mes - 1, dia + 1, 12)));
-  const inicio = combineDateAndTime(amanha, "00:00");
-  const fim = combineDateAndTime(amanha, "23:59");
+  const configuracao = await obterConfiguracao();
+  const inicio = new Date();
+  const fim = new Date(inicio.getTime() + configuracao.lembreteHoras * 60 * 60_000);
 
   const marcacoes = await prisma.agendamento.findMany({
     where: {
@@ -47,5 +48,18 @@ export async function POST(request: Request) {
     data: { status: "expirada" },
   });
   const notificacoes = await processarNotificacoes();
-  return NextResponse.json({ lembretes, estendidas, excecoes, propostasExpiradas: propostasExpiradas.count, notificacoes });
+  const resultado = { lembretes, estendidas, excecoes, propostasExpiradas: propostasExpiradas.count, notificacoes };
+  await prisma.$transaction([
+    prisma.execucaoCron.update({ where: { id: execucao.id }, data: { fim: new Date(), sucesso: true, resultado } }),
+    prisma.idempotencia.deleteMany({ where: { expiraEm: { lt: new Date() } } }),
+    prisma.limiteAcesso.deleteMany({ where: { expiraEm: { lt: new Date() } } }),
+  ]);
+  logger.info("cron.completed", resultado);
+  return NextResponse.json(resultado);
+  } catch (error) {
+    const message = error instanceof Error ? error.message.slice(0, 1000) : "Erro desconhecido";
+    await prisma.execucaoCron.update({ where: { id: execucao.id }, data: { fim: new Date(), sucesso: false, erro: message } });
+    logger.error("cron.failed", error, { execucaoId: execucao.id });
+    return NextResponse.json({ error: "Falha ao executar tarefas agendadas" }, { status: 500 });
+  }
 }

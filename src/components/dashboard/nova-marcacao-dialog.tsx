@@ -64,6 +64,8 @@ function NovaMarcacaoForm({
   const [intervaloSemanas, setIntervaloSemanas] = useState(1);
   const [diaSerie, setDiaSerie] = useState(() => diaDaSemana(toDateInputValue(new Date())));
   const [aEnviar, setAEnviar] = useState(false);
+  const [overrideMessage, setOverrideMessage] = useState("");
+  const [overrideReason, setOverrideReason] = useState("");
 
   async function criar(override = false, overrideReason?: string) {
     if (!clienteId || !servicoId || !data || !hora) {
@@ -84,17 +86,15 @@ function NovaMarcacaoForm({
       const json = await res.json();
       if (!res.ok) {
         if (json?.error?.code === "OVERRIDE_REQUIRED" && !repetir) {
-          const confirmado = window.confirm(`${messageFromResponse(json, "A hora não cumpre as regras normais.")}\n\nCriar uma exceção administrativa?`);
-          if (confirmado) {
-            const motivo = window.prompt("Indica o motivo da exceção:")?.trim();
-            if (motivo) await criar(true, motivo);
-          }
+          setOverrideMessage(messageFromResponse(json, "A hora não cumpre as regras normais."));
           return;
         }
         toast(messageFromResponse(json, "Erro ao criar marcação"), "erro");
         return;
       }
       toast(repetir ? "Série recorrente criada" : "Marcação criada");
+      setOverrideMessage("");
+      setOverrideReason("");
       onCriada();
       onClose();
     } catch {
@@ -221,6 +221,13 @@ function NovaMarcacaoForm({
                 </option>
               ))}
             </Select>
+          </div>
+        )}
+        {overrideMessage && !repetir && (
+          <div className="space-y-3 rounded-sm border border-gold/40 bg-gold/10 p-4">
+            <p className="text-sm text-gold">{overrideMessage}</p>
+            <div><label className="label" htmlFor="nm-override-reason">Motivo obrigatório da exceção</label><input id="nm-override-reason" className="input" minLength={3} value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)} placeholder="Ex.: cliente autorizado entre marcações" /></div>
+            <div className="flex gap-2"><button type="button" className="btn-outline" onClick={() => { setOverrideMessage(""); setOverrideReason(""); }}>Não criar</button><button type="button" className="btn-gold" disabled={aEnviar || overrideReason.trim().length < 3} onClick={() => criar(true, overrideReason.trim())}>Criar exceção</button></div>
           </div>
         )}
         <div className="flex justify-end gap-2 pt-2">

@@ -93,6 +93,7 @@ export interface GerarSlotsInput {
   horario: HorarioDia;
   ocupacoes: Ocupacao[];
   agora?: Date;
+  intervaloMin?: number;
 }
 
 export function gerarSlots({
@@ -101,6 +102,7 @@ export function gerarSlots({
   horario,
   ocupacoes,
   agora = new Date(),
+  intervaloMin = SLOT_INTERVAL_MIN,
 }: GerarSlotsInput): string[] {
   if (!horario.aberto || !horario.abertura || !horario.fecho) return [];
   const abertura = hhmmToMinutes(horario.abertura);
@@ -110,7 +112,7 @@ export function gerarSlots({
   const hoje = toDateOnlyString(agora);
   const slots: string[] = [];
 
-  for (let start = abertura; start + duracaoMin <= fecho; start += SLOT_INTERVAL_MIN) {
+  for (let start = abertura; start + duracaoMin <= fecho; start += intervaloMin) {
     const slotInicio = combineDateAndTime(data, minutesToHhmm(start));
     const slotFim = new Date(slotInicio.getTime() + duracaoMin * 60000);
 

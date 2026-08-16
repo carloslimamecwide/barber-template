@@ -1,14 +1,15 @@
 import { NextResponse } from "next/server";
-import { requireAuth } from "@/lib/auth";
+import { requireStaff } from "@/lib/auth";
 import { DisponibilidadeError, validarSlot } from "@/lib/disponibilidade";
 import { novaHoraSchema } from "@/lib/validations";
 import { criarToken } from "@/lib/tokens";
 import { enfileirarNotificacao } from "@/lib/notificacoes";
 import { apiError } from "@/lib/api";
+import { logger } from "@/lib/logger";
 import { transacaoSerializavel } from "@/lib/transactions";
 
 export async function POST(request: Request, ctx: { params: Promise<{ id: string }> }) {
-  if (!(await requireAuth())) return apiError("UNAUTHORIZED", "Não autorizado", 401);
+  if (!(await requireStaff())) return apiError("FORBIDDEN", "Sem permissão", 403);
   const { id } = await ctx.params;
   const parsed = novaHoraSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return apiError("VALIDATION_ERROR", "Data/hora inválidas", 422, parsed.error.issues);
@@ -54,7 +55,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
     if (code === "NOT_FOUND") return apiError("NOT_FOUND", "Agendamento não encontrado", 404);
     if (code === "INVALID_STATE") return apiError("INVALID_STATE", "A marcação já não admite propostas", 409);
     if (code === "NO_EMAIL") return apiError("NO_EMAIL", "O cliente não tem email", 409);
-    console.error("Erro ao sugerir horário", error);
+    logger.error("booking.proposal_failed", error, { agendamentoId: id });
     return apiError("INTERNAL_ERROR", "Não foi possível criar a proposta", 500);
   }
 }

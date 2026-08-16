@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: barber
+          POSTGRES_PASSWORD: barber
+          POSTGRES_DB: barber_shop_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U barber -d barber_shop_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://barber:barber@127.0.0.1:5432/barber_shop_test
+      TEST_DATABASE_URL: postgresql://barber:barber@127.0.0.1:5432/barber_shop_test
+      SESSION_SECRET: ci-session-secret-with-at-least-32-characters
+      BARBER_EMAIL: admin@example.com
+      BARBER_PASSWORD: password-ci-123
+      E2E_EMAIL: admin@example.com
+      E2E_PASSWORD: password-ci-123
+      NEXT_PUBLIC_APP_URL: http://127.0.0.1:3001
+      CRON_SECRET: ci-cron-secret
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx prisma validate
+      - run: npx prisma migrate deploy
+      - run: npm run db:seed
+      - run: npm test
+      - run: npm run test:integration
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e

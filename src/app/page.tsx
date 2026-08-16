@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { BookingForm } from "@/components/landing/booking-form";
 import { Toaster } from "@/components/ui/toaster";
 import { DIAS_SEMANA, formatPreco } from "@/lib/format";
+import { logger } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +16,7 @@ async function getDados() {
     ]);
     return { servicos, horarios };
   } catch (error) {
-    console.error("Erro ao carregar dados da landing page:", error);
+    logger.error("landing.load_failed", error);
     return { servicos: [], horarios: [] };
   }
 }

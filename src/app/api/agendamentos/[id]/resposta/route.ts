@@ -3,6 +3,7 @@ import { DisponibilidadeError, validarSlot } from "@/lib/disponibilidade";
 import { hashToken } from "@/lib/tokens";
 import { toDateOnlyString } from "@/lib/horarios";
 import { apiError } from "@/lib/api";
+import { logger } from "@/lib/logger";
 import { transacaoSerializavel } from "@/lib/transactions";
 
 export async function POST(request: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -47,7 +48,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
     if (code === "NOT_FOUND") return apiError("NOT_FOUND", "Proposta não encontrada", 404);
     if (code === "EXPIRED") return apiError("EXPIRED", "Esta proposta expirou", 410);
     if (code === "INVALID_STATE") return apiError("INVALID_STATE", "A marcação já não pode ser alterada", 409);
-    console.error("Erro ao responder proposta", error);
+    logger.error("booking.proposal_response_failed", error, { tokenPrefix: token.slice(0, 6) });
     return apiError("INTERNAL_ERROR", "Não foi possível responder", 500);
   }
 }

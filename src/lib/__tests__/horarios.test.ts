@@ -62,6 +62,11 @@ describe("gerarSlots", () => {
     expect(slots).toEqual(["09:00", "09:15", "09:30", "09:45", "10:00", "10:15", "10:30", "10:45", "11:00", "11:15", "11:30"]);
   });
 
+  it("respeita o intervalo configurado entre slots", () => {
+    const slots = gerarSlots({ data: "2026-08-03", duracaoMin: 30, horario: horarioAberto, ocupacoes: [], agora, intervaloMin: 30 });
+    expect(slots).toEqual(["09:00", "09:30", "10:00", "10:30", "11:00", "11:30"]);
+  });
+
   it("gera slots de 60 min e não ultrapassa o fecho", () => {
     const slots = gerarSlots({ data: "2026-08-03", duracaoMin: 60, horario: horarioAberto, ocupacoes: [], agora });
     expect(slots).toEqual(["09:00", "09:15", "09:30", "09:45", "10:00", "10:15", "10:30", "10:45", "11:00"]);

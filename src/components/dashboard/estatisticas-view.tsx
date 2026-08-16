@@ -9,9 +9,12 @@ type Estatisticas = {
   faturacao: number;
   totalMarcacoes: number;
   concluidos: number;
+  cancelados: number;
+  faltas: number;
   proximos: number;
   porServico: { nome: string; quantidade: number; total: number }[];
   porCliente: { nome: string; quantidade: number; total: number }[];
+  porProfissional: { nome: string; quantidade: number; total: number }[];
 };
 
 function mesAtual(): string {
@@ -60,13 +63,14 @@ export function EstatisticasView() {
           value={mes}
           onChange={(e) => setMes(e.target.value)}
         />
+        <a className="btn-outline" href={`/api/estatisticas?mes=${mes}&format=csv`}>Exportar CSV</a>
       </div>
 
       {carregando || !dados ? (
         <p className="text-muted">A carregar…</p>
       ) : (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
             {[
               {
                 label: "Faturação",
@@ -74,6 +78,8 @@ export function EstatisticasView() {
                 cor: "text-gold",
                 sub: "Serviços concluídos no mês",
               },
+              { label: "Canceladas", valor: String(dados.cancelados), cor: "text-danger", sub: "Cancelamentos no mês" },
+              { label: "Faltas", valor: String(dados.faltas), cor: "text-danger", sub: "Clientes que faltaram" },
               {
                 label: "Marcações no mês",
                 valor: String(dados.totalMarcacoes),
@@ -139,6 +145,11 @@ export function EstatisticasView() {
                   ))}
                 </ul>
               )}
+            </div>
+
+            <div className="card card-pad">
+              <h2 className="font-display text-2xl font-semibold text-gold">Faturação por profissional</h2>
+              {dados.porProfissional.length === 0 ? <p className="mt-4 text-sm text-muted">Sem dados neste mês.</p> : <ul className="mt-5 space-y-3">{dados.porProfissional.map((p) => <li key={p.nome} className="flex justify-between border-b border-line pb-2 text-sm"><span>{p.nome} <span className="text-muted">×{p.quantidade}</span></span><strong className="text-gold">{formatPreco(p.total)}</strong></li>)}</ul>}
             </div>
 
             <div className="card card-pad">

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Eye, Pencil, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { Dialog } from "@/components/ui/dialog";
 import { toast, Toaster } from "@/components/ui/toaster";
 import { useConfirm } from "@/hooks/use-confirm";
@@ -27,20 +27,24 @@ export function ClientesView() {
   const [editar, setEditar] = useState<Cliente | null>(null);
   const [form, setForm] = useState(VAZIO);
   const [aEnviar, setAEnviar] = useState(false);
+  const [search, setSearch] = useState("");
+  const [detalhe, setDetalhe] = useState<(Cliente & { agendamentos: { id: string; dataHora: string; status: string; precoCobrado: number; servico: { nome: string }; profissional: { nome: string } }[] }) | null>(null);
   const { confirm, dialog } = useConfirm();
 
   const carregar = useCallback(async () => {
     try {
-      const res = await fetch("/api/clientes");
+      const params = new URLSearchParams({ pageSize: "100" });
+      if (search.trim()) params.set("search", search.trim());
+      const res = await fetch(`/api/clientes?${params}`);
       const json = await res.json();
-      if (!res.ok || !Array.isArray(json)) throw new Error("Resposta inválida");
-      setClientes(json);
+      if (!res.ok || !Array.isArray(json.items)) throw new Error("Resposta inválida");
+      setClientes(json.items);
     } catch {
       toast("Erro ao carregar clientes", "erro");
     } finally {
       setCarregando(false);
     }
-  }, []);
+  }, [search]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -111,6 +115,16 @@ export function ClientesView() {
     }
   }
 
+  async function reativar(c: Cliente) {
+    const res = await fetch(`/api/clientes/${c.id}`, { method: "PATCH" });
+    if (res.ok) { toast("Cliente reativado"); carregar(); } else toast("Não foi possível reativar", "erro");
+  }
+
+  async function verDetalhe(c: Cliente) {
+    const res = await fetch(`/api/clientes/${c.id}`);
+    if (res.ok) setDetalhe(await res.json()); else toast("Não foi possível carregar o histórico", "erro");
+  }
+
   return (
     <div>
       <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
@@ -123,6 +137,11 @@ export function ClientesView() {
           Novo cliente
         </button>
       </div>
+
+      <search className="mb-5 block max-w-md">
+        <label className="label" htmlFor="clientes-search">Pesquisar</label>
+        <input id="clientes-search" type="search" className="input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Nome, telefone ou email" />
+      </search>
 
       {carregando ? (
         <p className="text-muted">A carregar…</p>
@@ -159,12 +178,11 @@ export function ClientesView() {
                   </td>
                   <td className="px-5 py-3">
                     <div className="flex justify-end gap-1">
+                      <button className="btn-ghost !p-2" onClick={() => verDetalhe(c)} aria-label="Ver histórico"><Eye className="h-4 w-4" /></button>
                       <button className="btn-ghost !p-2" onClick={() => abrirEdicao(c)} aria-label="Editar">
                         <Pencil className="h-4 w-4" />
                       </button>
-                      <button className="btn-ghost !p-2 hover:!text-danger" onClick={() => apagar(c)} aria-label="Apagar">
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      {c.ativo ? <button className="btn-ghost !p-2 hover:!text-danger" onClick={() => apagar(c)} aria-label="Arquivar"><Trash2 className="h-4 w-4" /></button> : <button className="btn-ghost !p-2" onClick={() => reativar(c)} aria-label="Reativar"><RotateCcw className="h-4 w-4" /></button>}
                     </div>
                   </td>
                 </tr>
@@ -235,6 +253,10 @@ export function ClientesView() {
             </button>
           </div>
         </div>
+      </Dialog>
+
+      <Dialog open={detalhe !== null} onClose={() => setDetalhe(null)} title={detalhe ? `Histórico de ${detalhe.nome}` : "Histórico"}>
+        {detalhe && <div className="space-y-4"><div className="rounded-sm border border-line bg-bg px-4 py-3 text-sm"><p>{detalhe.telefone} · {detalhe.email ?? "sem email"}</p>{detalhe.notas && <p className="mt-1 text-muted">{detalhe.notas}</p>}</div><ul className="max-h-80 space-y-2 overflow-y-auto">{detalhe.agendamentos.length === 0 ? <li className="text-sm text-muted">Sem marcações.</li> : detalhe.agendamentos.map((a) => <li key={a.id} className="rounded-sm border border-line px-4 py-3 text-sm"><div className="flex justify-between gap-3"><span className="font-semibold">{a.servico.nome}</span><span className="badge-gray">{a.status}</span></div><p className="mt-1 text-xs text-muted">{formatData(a.dataHora)} · {a.profissional.nome}</p></li>)}</ul><div className="flex justify-end"><button className="btn-outline" onClick={() => setDetalhe(null)}>Fechar</button></div></div>}
       </Dialog>
 
       {dialog}

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAuth } from "@/lib/auth";
+import { requireStaff } from "@/lib/auth";
 import { cancelarSerie } from "@/lib/series";
 import { gerarOcorrenciasSerie } from "@/lib/series";
 import { prisma } from "@/lib/prisma";
@@ -10,7 +10,7 @@ export async function DELETE(
   _request: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
-  if (!(await requireAuth())) {
+  if (!(await requireStaff())) {
     return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   }
   const { id } = await ctx.params;
@@ -19,7 +19,7 @@ export async function DELETE(
 }
 
 export async function PUT(request: Request, ctx: { params: Promise<{ id: string }> }) {
-  if (!(await requireAuth())) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  if (!(await requireStaff())) return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
   const { id } = await ctx.params;
   const parsed = serieSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Dados inválidos" }, { status: 422 });

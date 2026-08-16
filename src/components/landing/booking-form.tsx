@@ -30,6 +30,7 @@ export function BookingForm({ servicos }: { servicos: Servico[] }) {
   const [email, setEmail] = useState("");
   const [aEnviar, setAEnviar] = useState(false);
   const pedidoSlots = useRef(0);
+  const idempotencia = useRef<{ payload: string; key: string } | null>(null);
   const [confirmado, setConfirmado] = useState<{
     nome: string;
     servico: string;
@@ -71,16 +72,23 @@ export function BookingForm({ servicos }: { servicos: Servico[] }) {
     }
     setAEnviar(true);
     try {
+      const payload = JSON.stringify({
+        servicoId,
+        profissionalId: profissionalId || undefined,
+        data,
+        hora,
+        cliente: { nome, telefone, email },
+      });
+      if (!idempotencia.current || idempotencia.current.payload !== payload) {
+        idempotencia.current = { payload, key: crypto.randomUUID() };
+      }
       const res = await fetch("/api/agendamentos", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          servicoId,
-          profissionalId: profissionalId || undefined,
-          data,
-          hora,
-          cliente: { nome, telefone, email },
-        }),
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": idempotencia.current.key,
+        },
+        body: payload,
       });
       const json = await res.json();
       if (!res.ok) {
@@ -96,6 +104,7 @@ export function BookingForm({ servicos }: { servicos: Servico[] }) {
         dataHora: json.agendamento.dataHora,
         precoCents: servicoEscolhido?.precoCents ?? 0,
       });
+      idempotencia.current = null;
       toast("Marcação confirmada. O email ficou em fila para envio.");
       setServicoId("");
       setProfissionalId("");

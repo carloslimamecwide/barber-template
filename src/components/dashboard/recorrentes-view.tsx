@@ -14,8 +14,7 @@ type Serie = {
   hora: string;
   intervaloSemanas: number;
   dataInicio: string;
-  estado: "ativa" | "bloqueada" | "cancelada";
-  motivoBloqueio: string | null;
+  estado: "ativa" | "cancelada";
   cliente: { id: string; nome: string; telefone: string };
   servico: { id: string; nome: string; duracaoMin: number; precoCents: number };
   profissional: { id: string; nome: string } | null;
@@ -25,7 +24,6 @@ type Serie = {
 
 const ESTADO: Record<string, { label: string; classe: string }> = {
   ativa: { label: "Ativa", classe: "badge-green" },
-  bloqueada: { label: "Bloqueada", classe: "badge-red" },
 };
 
 function descricao(s: Serie): string {
@@ -68,7 +66,7 @@ export function RecorrentesView() {
     setAEnviar(serieId);
     try {
       const res = await fetch(url, {
-        method: url.endsWith("/retomar") ? "POST" : "DELETE",
+        method: "DELETE",
         headers: { "Content-Type": "application/json" },
       });
       const json = await res.json();
@@ -94,10 +92,6 @@ export function RecorrentesView() {
     });
     if (!confirmado) return;
     acao(s.id, `/api/series/${s.id}`, "Série cancelada");
-  }
-
-  function retomar(s: Serie) {
-    acao(s.id, `/api/series/${s.id}/retomar`, "Série retomada");
   }
 
   async function abrirEdicao(s: Serie) {
@@ -175,12 +169,6 @@ export function RecorrentesView() {
                   <p className="text-sm text-muted">
                     {s.servico.nome} · {descricao(s)}{s.profissional ? ` · ${s.profissional.nome}` : " · qualquer profissional"}
                   </p>
-                  {s.motivoBloqueio && (
-                    <p className="mt-0.5 text-xs text-red-400">
-                      Parou em {s.motivoBloqueio}: hora ocupada ou dia fechado.
-                      Resolve e retoma.
-                    </p>
-                  )}
                   {s.excecoes.length > 0 && (
                     <div className="mt-1 text-xs text-red-400">
                       <p>{s.excecoes.length} ocorrência(s) não criada(s); a série continua ativa.</p>
@@ -202,15 +190,6 @@ export function RecorrentesView() {
                 </div>
                 <div className="flex items-center gap-2">
                   <span className={st.classe}>{st.label}</span>
-                  {s.estado === "bloqueada" && (
-                    <button
-                      className="btn-outline !py-1.5 !px-3 !text-xs"
-                      disabled={aEnviar === s.id}
-                      onClick={() => retomar(s)}
-                    >
-                      Retomar
-                    </button>
-                  )}
                   <button className="btn-outline !py-1.5 !px-3 !text-xs" onClick={() => abrirEdicao(s)}><Pencil className="h-3.5 w-3.5" />Editar</button>
                   <button
                     className="btn-danger !py-1.5 !px-3 !text-xs"

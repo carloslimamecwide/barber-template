@@ -3,6 +3,7 @@ import { ReagendarShell } from "@/components/reagendar/reagendar-form";
 import { GestaoMarcacao } from "@/components/reagendar/gestao-marcacao";
 import { prisma } from "@/lib/prisma";
 import { hashToken } from "@/lib/tokens";
+import { logger } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +14,7 @@ async function carregar(token: string) {
       include: { cliente: true, servico: true, profissional: true },
     });
   } catch (error) {
-    console.error("Erro ao carregar marcação:", error);
+    logger.error("booking.management_page_failed", error);
     return null;
   }
 }

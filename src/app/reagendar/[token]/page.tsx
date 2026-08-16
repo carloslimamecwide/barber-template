@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { ReagendarForm, ReagendarShell } from "@/components/reagendar/reagendar-form";
 import { hashToken } from "@/lib/tokens";
+import { logger } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
 
@@ -36,7 +37,7 @@ export default async function ReagendarPage({
   try {
     agendamento = await getAgendamento(token);
   } catch (error) {
-    console.error("Erro ao carregar proposta de reagendamento:", error);
+    logger.error("booking.proposal_page_failed", error);
     agendamento = null;
   }
 

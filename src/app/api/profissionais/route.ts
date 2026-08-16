@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { requireAuth } from "@/lib/auth";
+import { requireStaff } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { profissionalSchema } from "@/lib/validations";
 
 export async function GET() {
-  if (!(await requireAuth())) {
+  if (!(await requireStaff())) {
     return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   }
   const profissionais = await prisma.profissional.findMany({
@@ -14,7 +14,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  if (!(await requireAuth())) {
+  if (!(await requireStaff())) {
     return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   }
   const parsed = profissionalSchema.safeParse(await request.json().catch(() => null));

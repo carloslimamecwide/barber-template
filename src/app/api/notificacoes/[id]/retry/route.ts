@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { requireAuth } from "@/lib/auth";
+import { requireStaff } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export async function POST(_request: Request, ctx: { params: Promise<{ id: string }> }) {
-  if (!(await requireAuth())) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  if (!(await requireStaff())) return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
   const { id } = await ctx.params;
   const result = await prisma.notificacao.updateMany({
     where: { id, estado: "falhada" },
