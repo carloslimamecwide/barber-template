@@ -124,17 +124,33 @@ jobs:
       - name: Health check
         run: |
           for attempt in {1..12}; do
-            if curl --fail --silent --location \
-              http://localhost:3000/pt > /dev/null; then
+            STATUS="$(docker inspect \
+              --format='{{.State.Health.Status}}' \
+              barbearia-app 2>/dev/null || echo "not-found")"
+
+            echo "Health status: ${STATUS} (${attempt}/12)"
+
+            if [ "$STATUS" = "healthy" ]; then
               echo "Application is healthy."
               exit 0
             fi
 
-            echo "Waiting for application: attempt ${attempt}/12"
+            if [ "$STATUS" = "unhealthy" ]; then
+              echo "Application is unhealthy."
+              docker inspect barbearia-app \
+                --format='{{range .State.Health.Log}}{{println .Output}}{{end}}'
+              docker logs barbearia-app --tail 100
+              exit 1
+            fi
+
             sleep 5
           done
 
-          echo "Application health check failed."
+          echo "Application did not become healthy in time."
+
+          docker inspect barbearia-app \
+            --format='{{range .State.Health.Log}}{{println .Output}}{{end}}'
+
           docker logs barbearia-app --tail 100
           exit 1
 
