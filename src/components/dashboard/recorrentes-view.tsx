@@ -1,22 +1,26 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Repeat } from "lucide-react";
+import { Pencil, Repeat } from "lucide-react";
 import { toast, Toaster } from "@/components/ui/toaster";
+import { Dialog } from "@/components/ui/dialog";
+import { Select } from "@/components/ui/select";
 import { useConfirm } from "@/hooks/use-confirm";
-import { formatDataHora, nomeDiaSemana } from "@/lib/format";
+import { DIAS_SEMANA, formatDataHora, nomeDiaSemana, toDateInputValue } from "@/lib/format";
 
 type Serie = {
   id: string;
   diaDaSemana: number;
   hora: string;
   intervaloSemanas: number;
+  dataInicio: string;
   estado: "ativa" | "bloqueada" | "cancelada";
   motivoBloqueio: string | null;
   cliente: { id: string; nome: string; telefone: string };
   servico: { id: string; nome: string; duracaoMin: number; precoCents: number };
   profissional: { id: string; nome: string } | null;
   agendamentos: { id: string; dataHora: string; status: string }[];
+  excecoes: { id: string; dataHora: string; motivo: string }[];
 };
 
 const ESTADO: Record<string, { label: string; classe: string }> = {
@@ -38,11 +42,16 @@ export function RecorrentesView() {
   const [carregando, setCarregando] = useState(true);
   const [aEnviar, setAEnviar] = useState<string | null>(null);
   const { confirm, dialog } = useConfirm();
+  const [editar, setEditar] = useState<Serie | null>(null);
+  const [opcoes, setOpcoes] = useState<{ clientes: { id: string; nome: string; ativo: boolean }[]; servicos: { id: string; nome: string; ativo: boolean }[]; profissionais: { id: string; nome: string; ativo: boolean }[] }>({ clientes: [], servicos: [], profissionais: [] });
+  const [form, setForm] = useState({ clienteId: "", servicoId: "", profissionalId: "", diaDaSemana: 1, hora: "09:00", intervaloSemanas: 1, dataInicio: "" });
 
   const carregar = useCallback(async () => {
     try {
       const res = await fetch("/api/series");
-      setSeries(await res.json());
+      const json = await res.json();
+      if (!res.ok || !Array.isArray(json)) throw new Error("Resposta inválida");
+      setSeries(json);
     } catch {
       toast("Erro ao carregar séries", "erro");
     } finally {
@@ -91,6 +100,47 @@ export function RecorrentesView() {
     acao(s.id, `/api/series/${s.id}/retomar`, "Série retomada");
   }
 
+  async function abrirEdicao(s: Serie) {
+    setForm({
+      clienteId: s.cliente.id, servicoId: s.servico.id,
+      profissionalId: s.profissional?.id ?? "", diaDaSemana: s.diaDaSemana,
+      hora: s.hora, intervaloSemanas: s.intervaloSemanas,
+      dataInicio: toDateInputValue(new Date(s.dataInicio)),
+    });
+    setEditar(s);
+    try {
+      const responses = await Promise.all([fetch("/api/clientes"), fetch("/api/servicos"), fetch("/api/profissionais")]);
+      if (responses.some((response) => !response.ok)) throw new Error();
+      const [clientes, servicos, profissionais] = await Promise.all(responses.map((response) => response.json()));
+      setOpcoes({ clientes, servicos, profissionais });
+    } catch { toast("Não foi possível carregar as opções", "erro"); }
+  }
+
+  async function guardarEdicao() {
+    if (!editar) return;
+    setAEnviar(editar.id);
+    try {
+      const res = await fetch(`/api/series/${editar.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...form, profissionalId: form.profissionalId || undefined }) });
+      const json = await res.json();
+      if (!res.ok) { toast(json.error ?? "Não foi possível editar", "erro"); return; }
+      toast(json.excecoes ? `Série atualizada com ${json.excecoes} conflito(s)` : "Série atualizada");
+      setEditar(null);
+      carregar();
+    } catch { toast("Erro de ligação", "erro"); }
+    finally { setAEnviar(null); }
+  }
+
+  async function tentarExcecao(serieId: string, exceptionId: string) {
+    setAEnviar(serieId);
+    try {
+      const res = await fetch(`/api/series/${serieId}/excecoes/${exceptionId}`, { method: "POST" });
+      const json = await res.json();
+      toast(res.ok && json.resolvida ? "Ocorrência criada" : "O conflito ainda existe", res.ok && json.resolvida ? "sucesso" : "erro");
+      carregar();
+    } catch { toast("Erro de ligação", "erro"); }
+    finally { setAEnviar(null); }
+  }
+
   return (
     <div>
       <div className="mb-8">
@@ -131,6 +181,12 @@ export function RecorrentesView() {
                       Resolve e retoma.
                     </p>
                   )}
+                  {s.excecoes.length > 0 && (
+                    <div className="mt-1 text-xs text-red-400">
+                      <p>{s.excecoes.length} ocorrência(s) não criada(s); a série continua ativa.</p>
+                      {s.excecoes.slice(0, 3).map((item) => <button key={item.id} className="mr-2 mt-1 underline" disabled={aEnviar === s.id} onClick={() => tentarExcecao(s.id, item.id)}>Tentar {formatDataHora(item.dataHora)}</button>)}
+                    </div>
+                  )}
                 </div>
                 <div className="text-right text-sm">
                   {proxima ? (
@@ -155,6 +211,7 @@ export function RecorrentesView() {
                       Retomar
                     </button>
                   )}
+                  <button className="btn-outline !py-1.5 !px-3 !text-xs" onClick={() => abrirEdicao(s)}><Pencil className="h-3.5 w-3.5" />Editar</button>
                   <button
                     className="btn-danger !py-1.5 !px-3 !text-xs"
                     disabled={aEnviar === s.id}
@@ -170,6 +227,21 @@ export function RecorrentesView() {
       )}
 
       {dialog}
+      <Dialog open={editar !== null} onClose={() => setEditar(null)} title="Editar série recorrente">
+        <div className="space-y-4">
+          <Select label="Cliente" value={form.clienteId} onChange={(value) => setForm({ ...form, clienteId: value })}>{opcoes.clientes.filter((item) => item.ativo || item.id === form.clienteId).map((item) => <option key={item.id} value={item.id}>{item.nome}</option>)}</Select>
+          <Select label="Serviço" value={form.servicoId} onChange={(value) => setForm({ ...form, servicoId: value })}>{opcoes.servicos.filter((item) => item.ativo || item.id === form.servicoId).map((item) => <option key={item.id} value={item.id}>{item.nome}</option>)}</Select>
+          <Select label="Profissional" value={form.profissionalId} onChange={(value) => setForm({ ...form, profissionalId: value })}><option value="">Qualquer profissional</option>{opcoes.profissionais.filter((item) => item.ativo || item.id === form.profissionalId).map((item) => <option key={item.id} value={item.id}>{item.nome}</option>)}</Select>
+          <div className="grid grid-cols-2 gap-3">
+            <Select label="Dia da semana" value={form.diaDaSemana} onChange={(value) => setForm({ ...form, diaDaSemana: Number(value) })}>{DIAS_SEMANA.map((item) => <option key={item.valor} value={item.valor}>{item.nome}</option>)}</Select>
+            <div><label className="label" htmlFor="serie-hora">Hora</label><input id="serie-hora" type="time" className="input" value={form.hora} onChange={(event) => setForm({ ...form, hora: event.target.value })} /></div>
+            <Select label="Intervalo" value={form.intervaloSemanas} onChange={(value) => setForm({ ...form, intervaloSemanas: Number(value) })}>{[1, 2, 3, 4].map((value) => <option key={value} value={value}>{value} semana(s)</option>)}</Select>
+            <div><label className="label" htmlFor="serie-inicio">Início</label><input id="serie-inicio" type="date" className="input" value={form.dataInicio} onChange={(event) => setForm({ ...form, dataInicio: event.target.value })} /></div>
+          </div>
+          <p className="text-xs text-muted">As ocorrências futuras são regeneradas; o histórico passado é preservado.</p>
+          <div className="flex justify-end gap-2"><button className="btn-outline" onClick={() => setEditar(null)}>Cancelar</button><button className="btn-gold" disabled={aEnviar === editar?.id} onClick={guardarEdicao}>Guardar</button></div>
+        </div>
+      </Dialog>
       <Toaster />
     </div>
   );

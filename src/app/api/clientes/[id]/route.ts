@@ -18,7 +18,12 @@ export async function PUT(
   }
   const cliente = await prisma.cliente.update({
     where: { id },
-    data: parsed.data,
+    data: {
+      ...parsed.data,
+      email: parsed.data.email?.trim().toLowerCase() || null,
+      emailNormalizado: parsed.data.email?.trim().toLowerCase() || null,
+      ativo: true,
+    },
   });
   return NextResponse.json(cliente);
 }
@@ -31,6 +36,6 @@ export async function DELETE(
     return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   }
   const { id } = await ctx.params;
-  await prisma.cliente.delete({ where: { id } });
+  await prisma.cliente.update({ where: { id }, data: { ativo: false } });
   return NextResponse.json({ ok: true });
 }

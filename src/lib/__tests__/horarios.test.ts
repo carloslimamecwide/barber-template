@@ -36,6 +36,18 @@ describe("helpers", () => {
   it("converte Date para YYYY-MM-DD", () => {
     expect(toDateOnlyString(new Date(2026, 7, 3))).toBe("2026-08-03");
   });
+
+  it("converte hora de Lisboa para UTC no horário de verão", () => {
+    expect(combineDateAndTime("2026-08-03", "10:00").toISOString()).toBe("2026-08-03T09:00:00.000Z");
+  });
+
+  it("converte hora de Lisboa para UTC no horário de inverno", () => {
+    expect(combineDateAndTime("2026-01-05", "10:00").toISOString()).toBe("2026-01-05T10:00:00.000Z");
+  });
+
+  it("rejeita uma hora inexistente na mudança para horário de verão", () => {
+    expect(() => combineDateAndTime("2026-03-29", "01:30")).toThrow();
+  });
 });
 
 describe("gerarSlots", () => {
@@ -47,12 +59,12 @@ describe("gerarSlots", () => {
 
   it("gera slots de 30 min dentro do horário", () => {
     const slots = gerarSlots({ data: "2026-08-03", duracaoMin: 30, horario: horarioAberto, ocupacoes: [], agora });
-    expect(slots).toEqual(["09:00", "09:30", "10:00", "10:30", "11:00", "11:30"]);
+    expect(slots).toEqual(["09:00", "09:15", "09:30", "09:45", "10:00", "10:15", "10:30", "10:45", "11:00", "11:15", "11:30"]);
   });
 
   it("gera slots de 60 min e não ultrapassa o fecho", () => {
     const slots = gerarSlots({ data: "2026-08-03", duracaoMin: 60, horario: horarioAberto, ocupacoes: [], agora });
-    expect(slots).toEqual(["09:00", "10:00", "11:00"]);
+    expect(slots).toEqual(["09:00", "09:15", "09:30", "09:45", "10:00", "10:15", "10:30", "10:45", "11:00"]);
   });
 
   it("remove slots ocupados por outra marcação", () => {
@@ -83,12 +95,12 @@ describe("gerarSlots", () => {
   it("não gera slots no passado no dia atual", () => {
     const agora = new Date(2026, 7, 3, 10, 30);
     const slots = gerarSlots({ data: "2026-08-03", duracaoMin: 30, horario: horarioAberto, ocupacoes: [], agora });
-    expect(slots).toEqual(["11:00", "11:30"]);
+    expect(slots).toEqual(["10:45", "11:00", "11:15", "11:30"]);
   });
 
   it("não bloqueia slots passados num dia futuro", () => {
     const slots = gerarSlots({ data: "2026-08-04", duracaoMin: 30, horario: horarioAberto, ocupacoes: [], agora });
-    expect(slots).toEqual(["09:00", "09:30", "10:00", "10:30", "11:00", "11:30"]);
+    expect(slots).toEqual(["09:00", "09:15", "09:30", "09:45", "10:00", "10:15", "10:30", "10:45", "11:00", "11:15", "11:30"]);
   });
 
   it("devolve vazio quando duração excede o horário", () => {
@@ -103,6 +115,6 @@ describe("gerarSlots", () => {
       ocupacoes: [],
       agora,
     });
-    expect(slots).toEqual(["09:00", "09:30", "11:00", "11:30"]);
+    expect(slots).toEqual(["09:00", "09:15", "09:30", "11:00", "11:15", "11:30"]);
   });
 });

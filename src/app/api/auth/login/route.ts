@@ -13,11 +13,11 @@ export async function POST(request: Request) {
     );
   }
 
-  const ok = await verifyBarberCredentials(
+  const user = await verifyBarberCredentials(
     parsed.data.email,
     parsed.data.password,
   );
-  if (!ok) {
+  if (!user) {
     return NextResponse.json(
       { error: "Credenciais inválidas" },
       { status: 401 },
@@ -25,7 +25,8 @@ export async function POST(request: Request) {
   }
 
   const session = await getSession();
-  session.email = parsed.data.email.toLowerCase();
+  session.userId = user.id;
+  session.email = user.email;
   await session.save();
 
   return NextResponse.json({ ok: true });

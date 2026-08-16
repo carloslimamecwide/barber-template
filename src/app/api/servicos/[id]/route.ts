@@ -36,6 +36,6 @@ export async function DELETE(
     return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   }
   const { id } = await ctx.params;
-  await prisma.servico.delete({ where: { id } });
+  await prisma.servico.update({ where: { id }, data: { ativo: false } });
   return NextResponse.json({ ok: true });
 }

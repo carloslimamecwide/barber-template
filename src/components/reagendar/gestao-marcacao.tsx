@@ -1,13 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useConfirm } from "@/hooks/use-confirm";
 import { formatDataHora } from "@/lib/format";
+import { messageFromResponse } from "@/lib/http";
+import { toDateInputValue } from "@/lib/format";
 
 type Agendamento = {
   cliente: { nome: string };
-  servico: { nome: string; duracaoMin: number };
-  profissional: { nome: string } | null;
+  servico: { id: string; nome: string; duracaoMin: number };
+  profissional: { id: string; nome: string } | null;
   dataHora: string;
   status: string;
 };
@@ -17,7 +19,21 @@ export function GestaoMarcacao({ token, agendamento }: { token: string; agendame
   const [hora, setHora] = useState("");
   const [resultado, setResultado] = useState("");
   const [aEnviar, setAEnviar] = useState(false);
+  const [slots, setSlots] = useState<string[]>([]);
   const { confirm, dialog } = useConfirm();
+
+  useEffect(() => {
+    if (!data || !agendamento.profissional) {
+      return;
+    }
+    const params = new URLSearchParams({ data, servicoId: agendamento.servico.id, profissionalId: agendamento.profissional.id });
+    let ativo = true;
+    fetch(`/api/agendamentos/disponiveis?${params}`)
+      .then((res) => res.json())
+      .then((json) => { if (ativo) setSlots(Array.isArray(json.slots) ? json.slots : []); })
+      .catch(() => { if (ativo) setSlots([]); });
+    return () => { ativo = false; };
+  }, [data, agendamento.profissional, agendamento.servico.id]);
 
   async function enviar(body: Record<string, string>) {
     setAEnviar(true);
@@ -25,7 +41,7 @@ export function GestaoMarcacao({ token, agendamento }: { token: string; agendame
     try {
       const res = await fetch(`/api/marcacoes/${token}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const json = await res.json();
-      setResultado(res.ok ? (body.acao === "cancelar" ? "Marcação cancelada." : "Marcação reagendada com sucesso.") : json.error ?? "Não foi possível atualizar a marcação.");
+      setResultado(res.ok ? (body.acao === "cancelar" ? "Marcação cancelada." : "Marcação reagendada com sucesso.") : messageFromResponse(json, "Não foi possível atualizar a marcação."));
     } catch {
       setResultado("Erro de ligação. Tenta novamente.");
     } finally {
@@ -40,7 +56,7 @@ export function GestaoMarcacao({ token, agendamento }: { token: string; agendame
       <div className="mt-5 space-y-2 text-sm"><p><span className="text-muted">Serviço:</span> {agendamento.servico.nome}</p><p><span className="text-muted">Quando:</span> {formatDataHora(agendamento.dataHora.toString())}</p>{agendamento.profissional && <p><span className="text-muted">Profissional:</span> {agendamento.profissional.nome}</p>}</div>
       {resultado && <p className="mt-5 rounded-sm border border-gold/40 bg-gold/10 px-3 py-2 text-sm text-gold" role="status">{resultado}</p>}
       {agendamento.status === "agendado" && !resultado.includes("cancelada") && !resultado.includes("reagendada") && <>
-        <div className="mt-6 grid grid-cols-2 gap-3"><div><label className="label" htmlFor="mg-data">Nova data</label><input id="mg-data" type="date" className="input" min={new Date().toISOString().slice(0, 10)} value={data} onChange={(e) => setData(e.target.value)} /></div><div><label className="label" htmlFor="mg-hora">Nova hora</label><input id="mg-hora" type="time" className="input" value={hora} onChange={(e) => setHora(e.target.value)} /></div></div>
+        <div className="mt-6 grid grid-cols-2 gap-3"><div><label className="label" htmlFor="mg-data">Nova data</label><input id="mg-data" type="date" className="input" min={toDateInputValue(new Date())} value={data} onChange={(e) => { setData(e.target.value); setHora(""); setSlots([]); }} /></div><div><label className="label" htmlFor="mg-hora">Nova hora</label><select id="mg-hora" className="input" value={hora} onChange={(e) => setHora(e.target.value)} disabled={!data}><option value="">Escolhe</option>{slots.map((slot) => <option key={slot} value={slot}>{slot}</option>)}</select></div></div>
         <button className="btn-gold mt-5 w-full" disabled={aEnviar || !data || !hora} onClick={() => enviar({ data, hora })}>{aEnviar ? "A guardar…" : "Reagendar"}</button>
         <button
           className="btn-danger mt-3 w-full"

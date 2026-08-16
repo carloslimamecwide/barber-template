@@ -1,117 +1,84 @@
 import { prisma } from "@/lib/prisma";
-import { combineDateAndTime, gerarSlots, toDateOnlyString } from "@/lib/horarios";
-import { obterHorarioDoDia, obterOcupacoesDoDia } from "@/lib/disponibilidade";
-import { datasOcorrencia, fimDoAno, slotValido } from "@/lib/recorrencia";
+import { criarAgendamento } from "@/lib/agendamentos";
+import { combineDateAndTime, toDateOnlyString } from "@/lib/horarios";
+import { datasOcorrencia } from "@/lib/recorrencia";
 
-export async function gerarOcorrenciasSerie(
-  serieId: string,
-  agora = new Date(),
-): Promise<{ criadas: number }> {
+function horizonte(agora: Date) {
+  const fim = new Date(agora);
+  fim.setUTCFullYear(fim.getUTCFullYear() + 1);
+  return toDateOnlyString(fim);
+}
+
+export async function gerarOcorrenciasSerie(serieId: string, agora = new Date()) {
   const serie = await prisma.serieRecorrente.findUnique({
-    where: { id: serieId },
-    include: { servico: true },
+    where: { id: serieId }, include: { servico: true, cliente: true },
   });
-  if (!serie || serie.estado !== "ativa") return { criadas: 0 };
-
-  const dataFim = fimDoAno(agora);
-
-  await prisma.agendamento.deleteMany({
-    where: {
-      serieId,
-      status: "agendado",
-      dataHora: { gt: combineDateAndTime(dataFim, "23:59") },
-    },
-  });
+  if (!serie || serie.estado !== "ativa") return { criadas: 0, excecoes: 0 };
 
   const datas = datasOcorrencia({
     diaDaSemana: serie.diaDaSemana,
     intervaloSemanas: serie.intervaloSemanas,
     dataInicio: toDateOnlyString(serie.dataInicio),
-    dataFim,
+    dataFim: horizonte(agora),
   });
-
   const existentes = await prisma.agendamento.findMany({
-    where: { serieId },
-    select: { dataHora: true },
+    where: { serieId }, select: { dataHora: true },
   });
-  const datasExistentes = new Set(existentes.map((a) => a.dataHora.getTime()));
-
+  const datasExistentes = new Set(existentes.map((item) => item.dataHora.getTime()));
   let criadas = 0;
-  for (const dataStr of datas) {
-    const dataHora = combineDateAndTime(dataStr, serie.hora);
-    if (dataHora <= agora) continue;
-    if (datasExistentes.has(dataHora.getTime())) continue;
-
-    const [horario, ocupacoes] = await Promise.all([
-      obterHorarioDoDia(dataStr),
-      obterOcupacoesDoDia(dataStr, undefined, serie.profissionalId ?? undefined),
-    ]);
-    const slots = gerarSlots({
-      data: dataStr,
-      duracaoMin: serie.servico.duracaoMin,
-      horario,
-      ocupacoes,
-      agora,
-    });
-    if (!slotValido(slots, serie.hora)) {
-      await prisma.serieRecorrente.update({
-        where: { id: serieId },
-        data: { estado: "bloqueada", motivoBloqueio: dataStr, bloqueadaEm: new Date() },
-      });
-      return { criadas };
-    }
-
-    await prisma.agendamento.create({
-      data: {
+  let excecoes = 0;
+  for (const data of datas) {
+    const dataHoraPlaneada = combineDateAndTime(data, serie.hora);
+    if (dataHoraPlaneada <= agora || datasExistentes.has(dataHoraPlaneada.getTime())) continue;
+    try {
+      await criarAgendamento({
         clienteId: serie.clienteId,
         servicoId: serie.servicoId,
-        profissionalId: serie.profissionalId,
-        dataHora,
-        status: "agendado",
-        precoCobrado: serie.servico.precoCents,
+        profissionalId: serie.profissionalId ?? undefined,
+        data,
+        hora: serie.hora,
         serieId,
-      },
-    });
-    criadas++;
+        notificar: false,
+      });
+      await prisma.excecaoSerie.updateMany({
+        where: { serieId, dataHora: dataHoraPlaneada, resolvidaEm: null },
+        data: { resolvidaEm: new Date() },
+      });
+      criadas++;
+    } catch (error) {
+      await prisma.excecaoSerie.upsert({
+        where: { serieId_dataHora: { serieId, dataHora: dataHoraPlaneada } },
+        update: { motivo: error instanceof Error ? error.message : "Horário indisponível", resolvidaEm: null },
+        create: { serieId, dataHora: dataHoraPlaneada, motivo: error instanceof Error ? error.message : "Horário indisponível" },
+      });
+      excecoes++;
+    }
   }
-  return { criadas };
+  return { criadas, excecoes };
 }
 
-export async function estenderSeries(
-  agora = new Date(),
-): Promise<{ estendidas: number }> {
-  const series = await prisma.serieRecorrente.findMany({
-    where: { estado: "ativa" },
-  });
+export async function estenderSeries(agora = new Date()) {
+  const series = await prisma.serieRecorrente.findMany({ where: { estado: "ativa" } });
   let estendidas = 0;
+  let excecoes = 0;
   for (const serie of series) {
-    const { criadas } = await gerarOcorrenciasSerie(serie.id, agora);
-    if (criadas > 0) estendidas++;
+    const result = await gerarOcorrenciasSerie(serie.id, agora);
+    if (result.criadas) estendidas++;
+    excecoes += result.excecoes;
   }
-  return { estendidas };
+  return { estendidas, excecoes };
 }
 
-export async function cancelarSerie(serieId: string, agora = new Date()): Promise<void> {
+export async function cancelarSerie(serieId: string, agora = new Date()) {
   await prisma.$transaction([
-    prisma.serieRecorrente.update({
-      where: { id: serieId },
-      data: { estado: "cancelada", canceladaEm: new Date() },
-    }),
-    prisma.agendamento.updateMany({
-      where: { serieId, dataHora: { gt: agora } },
-      data: { status: "cancelado" },
-    }),
+    prisma.serieRecorrente.update({ where: { id: serieId }, data: { estado: "cancelada", canceladaEm: new Date() } }),
+    prisma.agendamento.updateMany({ where: { serieId, dataHora: { gt: agora }, status: "agendado" }, data: { status: "cancelado" } }),
   ]);
 }
 
-export async function retomarSerie(
-  serieId: string,
-  agora = new Date(),
-): Promise<{ criadas: number }> {
-  const serie = await prisma.serieRecorrente.findUnique({ where: { id: serieId } });
-  if (!serie || serie.estado !== "bloqueada") return { criadas: 0 };
-  await prisma.serieRecorrente.update({
-    where: { id: serieId },
+export async function retomarSerie(serieId: string, agora = new Date()) {
+  await prisma.serieRecorrente.updateMany({
+    where: { id: serieId, estado: "bloqueada" },
     data: { estado: "ativa", motivoBloqueio: null, bloqueadaEm: null },
   });
   return gerarOcorrenciasSerie(serieId, agora);

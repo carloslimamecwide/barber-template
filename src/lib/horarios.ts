@@ -11,22 +11,64 @@ export interface Ocupacao {
   fim: Date;
 }
 
+export const TIME_ZONE = "Europe/Lisbon";
+export const SLOT_INTERVAL_MIN = 15;
+
+const formatterData = new Intl.DateTimeFormat("en-CA", {
+  timeZone: TIME_ZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+function partesEmLisboa(date: Date) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  return Object.fromEntries(parts.map((p) => [p.type, p.value]));
+}
+
 export function toDateOnlyString(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+  return formatterData.format(d);
 }
 
 export function dateOnlyToDate(dateStr: string): Date {
-  const [y, m, d] = dateStr.split("-").map(Number);
-  return new Date(y, m - 1, d);
+  return new Date(`${dateStr}T00:00:00.000Z`);
 }
 
 export function combineDateAndTime(dateStr: string, hhmm: string): Date {
   const [y, m, d] = dateStr.split("-").map(Number);
   const [hh, mm] = hhmm.split(":").map(Number);
-  return new Date(y, m - 1, d, hh, mm);
+  const pretendUtc = Date.UTC(y, m - 1, d, hh, mm);
+  let candidate = new Date(pretendUtc);
+  for (let i = 0; i < 2; i++) {
+    const p = partesEmLisboa(candidate);
+    const represented = Date.UTC(
+      Number(p.year),
+      Number(p.month) - 1,
+      Number(p.day),
+      Number(p.hour),
+      Number(p.minute),
+      Number(p.second),
+    );
+    candidate = new Date(candidate.getTime() + pretendUtc - represented);
+  }
+  const roundTrip = partesEmLisboa(candidate);
+  if (
+    Number(roundTrip.year) !== y || Number(roundTrip.month) !== m ||
+    Number(roundTrip.day) !== d || Number(roundTrip.hour) !== hh ||
+    Number(roundTrip.minute) !== mm
+  ) {
+    throw new Error("Data/hora inexistente em Europe/Lisbon");
+  }
+  return candidate;
 }
 
 export function minutesToHhmm(totalMin: number): string {
@@ -41,7 +83,8 @@ export function hhmmToMinutes(hhmm: string): number {
 }
 
 export function diaDaSemana(dateStr: string): number {
-  return dateOnlyToDate(dateStr).getDay();
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d, 12)).getUTCDay();
 }
 
 export interface GerarSlotsInput {
@@ -67,7 +110,7 @@ export function gerarSlots({
   const hoje = toDateOnlyString(agora);
   const slots: string[] = [];
 
-  for (let start = abertura; start + duracaoMin <= fecho; start += duracaoMin) {
+  for (let start = abertura; start + duracaoMin <= fecho; start += SLOT_INTERVAL_MIN) {
     const slotInicio = combineDateAndTime(data, minutesToHhmm(start));
     const slotFim = new Date(slotInicio.getTime() + duracaoMin * 60000);
 

@@ -18,6 +18,7 @@ enum StatusProposta {
   pendente
   confirmada
   recusada
+  expirada
 }
 
 enum SerieEstado {
@@ -26,21 +27,37 @@ enum SerieEstado {
   cancelada
 }
 
+enum TipoNotificacao {
+  confirmacao
+  proposta
+  lembrete
+}
+
+enum EstadoNotificacao {
+  pendente
+  processando
+  enviada
+  falhada
+}
+
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  passwordHash String
-  createdAt    DateTime @default(now())
+  id               String    @id @default(cuid())
+  email            String    @unique
+  passwordHash     String
+  ativo            Boolean   @default(true)
+  tentativasFalhas Int       @default(0)
+  bloqueadoAte     DateTime? @db.Timestamptz(3)
+  createdAt        DateTime  @default(now()) @db.Timestamptz(3)
 }
 
 model Profissional {
-  id           String         @id @default(cuid())
+  id           String            @id @default(cuid())
   nome         String
   telefone     String?
   email        String?
-  ativo        Boolean        @default(true)
-  ordem        Int            @default(0)
-  criadoEm     DateTime       @default(now())
+  ativo        Boolean           @default(true)
+  ordem        Int               @default(0)
+  criadoEm     DateTime          @default(now()) @db.Timestamptz(3)
   agendamentos Agendamento[]
   series       SerieRecorrente[]
 
@@ -48,79 +65,137 @@ model Profissional {
 }
 
 model Cliente {
-  id          String        @id @default(cuid())
-  nome        String
-  telefone    String
-  email       String?
-  notas       String?
-  createdAt   DateTime      @default(now())
-  agendamentos Agendamento[]
-  series      SerieRecorrente[]
+  id               String            @id @default(cuid())
+  nome             String
+  telefone         String
+  email            String?
+  emailNormalizado String?           @unique
+  notas            String?
+  ativo            Boolean           @default(true)
+  createdAt        DateTime          @default(now()) @db.Timestamptz(3)
+  agendamentos     Agendamento[]
+  series           SerieRecorrente[]
+
+  @@index([ativo, nome])
 }
 
 model Servico {
-  id          String        @id @default(cuid())
-  nome        String
-  precoCents  Int
-  duracaoMin  Int
-  ativo       Boolean       @default(true)
+  id           String            @id @default(cuid())
+  nome         String
+  precoCents   Int
+  duracaoMin   Int
+  ativo        Boolean           @default(true)
   agendamentos Agendamento[]
-  series      SerieRecorrente[]
+  series       SerieRecorrente[]
+
+  @@index([ativo, nome])
 }
 
 model Agendamento {
-  id                   String            @id @default(cuid())
-  clienteId            String
-  servicoId            String
-  profissionalId       String?
-  dataHora             DateTime
-  status               StatusAgendamento @default(agendado)
-  precoCobrado         Int
-  notas                String?
-  criadoEm             DateTime          @default(now())
-  novaDataHoraProposta DateTime?
-  tokenProposta        String?           @unique
-  propostaStatus       StatusProposta?
-  propostaExpiraEm     DateTime?
-  tokenGestao          String?           @unique
-  tokenGestaoExpiraEm  DateTime?
-  serieId              String?
-  lembreteEnviadoEm    DateTime?
-  cliente              Cliente           @relation(fields: [clienteId], references: [id])
-  servico              Servico           @relation(fields: [servicoId], references: [id])
-  profissional         Profissional?     @relation(fields: [profissionalId], references: [id], onDelete: SetNull)
-  serie                SerieRecorrente?  @relation(fields: [serieId], references: [id], onDelete: SetNull)
+  id                  String                  @id @default(cuid())
+  clienteId           String
+  servicoId           String
+  profissionalId      String
+  dataHora            DateTime                @db.Timestamptz(3)
+  status              StatusAgendamento       @default(agendado)
+  precoCobrado        Int
+  duracaoAgendadaMin  Int
+  notas               String?
+  criadoEm            DateTime                @default(now()) @db.Timestamptz(3)
+  tokenGestaoHash     String?                 @unique
+  tokenGestaoExpiraEm DateTime?               @db.Timestamptz(3)
+  serieId             String?
+  lembreteEnviadoEm   DateTime?               @db.Timestamptz(3)
+  excecaoManual       Boolean                 @default(false)
+  motivoExcecao       String?
+  arquivadoEm         DateTime?               @db.Timestamptz(3)
+  cliente             Cliente                 @relation(fields: [clienteId], references: [id], onDelete: Restrict)
+  servico             Servico                 @relation(fields: [servicoId], references: [id], onDelete: Restrict)
+  profissional        Profissional            @relation(fields: [profissionalId], references: [id], onDelete: Restrict)
+  serie               SerieRecorrente?        @relation(fields: [serieId], references: [id], onDelete: SetNull)
+  propostas           PropostaReagendamento[]
+  notificacoes        Notificacao[]
 
+  @@unique([serieId, dataHora])
   @@index([dataHora])
   @@index([clienteId])
   @@index([servicoId])
   @@index([profissionalId, dataHora])
   @@index([serieId])
+  @@index([status, dataHora])
+}
+
+model PropostaReagendamento {
+  id            String         @id @default(cuid())
+  agendamentoId String
+  tokenHash     String         @unique
+  dataHoraAtual DateTime       @db.Timestamptz(3)
+  novaDataHora  DateTime       @db.Timestamptz(3)
+  status        StatusProposta @default(pendente)
+  expiraEm      DateTime       @db.Timestamptz(3)
+  criadaEm      DateTime       @default(now()) @db.Timestamptz(3)
+  respondidaEm  DateTime?      @db.Timestamptz(3)
+  agendamento   Agendamento    @relation(fields: [agendamentoId], references: [id], onDelete: Cascade)
+
+  @@index([agendamentoId, status])
+  @@index([expiraEm, status])
 }
 
 model SerieRecorrente {
-  id               String       @id @default(cuid())
+  id               String         @id @default(cuid())
   clienteId        String
   servicoId        String
   profissionalId   String?
   diaDaSemana      Int
   hora             String
-  intervaloSemanas Int          @default(1)
-  dataInicio       DateTime
-  estado           SerieEstado  @default(ativa)
+  intervaloSemanas Int            @default(1)
+  dataInicio       DateTime       @db.Date
+  estado           SerieEstado    @default(ativa)
   motivoBloqueio   String?
-  bloqueadaEm      DateTime?
-  canceladaEm      DateTime?
-  criadaEm         DateTime     @default(now())
-  cliente          Cliente      @relation(fields: [clienteId], references: [id], onDelete: Cascade)
-  servico          Servico      @relation(fields: [servicoId], references: [id], onDelete: Restrict)
-  profissional      Profissional? @relation(fields: [profissionalId], references: [id], onDelete: SetNull)
+  bloqueadaEm      DateTime?      @db.Timestamptz(3)
+  canceladaEm      DateTime?      @db.Timestamptz(3)
+  criadaEm         DateTime       @default(now()) @db.Timestamptz(3)
+  cliente          Cliente        @relation(fields: [clienteId], references: [id], onDelete: Restrict)
+  servico          Servico        @relation(fields: [servicoId], references: [id], onDelete: Restrict)
+  profissional     Profissional?  @relation(fields: [profissionalId], references: [id], onDelete: SetNull)
   agendamentos     Agendamento[]
+  excecoes         ExcecaoSerie[]
 
   @@index([clienteId])
   @@index([servicoId])
   @@index([profissionalId])
   @@index([estado])
+}
+
+model ExcecaoSerie {
+  id          String          @id @default(cuid())
+  serieId     String
+  dataHora    DateTime        @db.Timestamptz(3)
+  motivo      String
+  resolvidaEm DateTime?       @db.Timestamptz(3)
+  criadaEm    DateTime        @default(now()) @db.Timestamptz(3)
+  serie       SerieRecorrente @relation(fields: [serieId], references: [id], onDelete: Cascade)
+
+  @@unique([serieId, dataHora])
+  @@index([resolvidaEm])
+}
+
+model Notificacao {
+  id                 String            @id @default(cuid())
+  agendamentoId      String?
+  tipo               TipoNotificacao
+  estado             EstadoNotificacao @default(pendente)
+  destinatario       String
+  payload            Json
+  tentativas         Int               @default(0)
+  proximaTentativaEm DateTime          @default(now()) @db.Timestamptz(3)
+  ultimoErro         String?
+  criadaEm           DateTime          @default(now()) @db.Timestamptz(3)
+  enviadaEm          DateTime?         @db.Timestamptz(3)
+  agendamento        Agendamento?      @relation(fields: [agendamentoId], references: [id], onDelete: SetNull)
+
+  @@index([estado, proximaTentativaEm])
+  @@index([agendamentoId, tipo])
 }
 
 model HorarioFuncionamento {

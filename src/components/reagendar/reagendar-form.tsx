@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Scissors } from "lucide-react";
+import { messageFromResponse } from "@/lib/http";
 
 export function ReagendarForm({
   token,
@@ -33,7 +34,7 @@ export function ReagendarForm({
       });
       const json = await res.json();
       if (!res.ok) {
-        setErro(json.error ?? "Ocorreu um erro");
+        setErro(messageFromResponse(json, "Ocorreu um erro"));
         return;
       }
       setResultado(json.resultado);

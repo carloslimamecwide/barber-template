@@ -98,6 +98,16 @@ export function ProfissionaisView() {
     }
   }
 
+  async function reativar(profissional: Profissional) {
+    const res = await fetch(`/api/profissionais/${profissional.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nome: profissional.nome, telefone: profissional.telefone ?? "", email: profissional.email ?? "", ativo: true }),
+    });
+    if (res.ok) { toast("Profissional reativado"); carregar(); }
+    else toast("Não foi possível reativar", "erro");
+  }
+
   return (
     <div>
       <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
@@ -123,7 +133,7 @@ export function ProfissionaisView() {
                   <td className="px-5 py-3 text-muted">{p.telefone ?? "—"}</td>
                   <td className="px-5 py-3 text-muted">{p.email ?? "—"}</td>
                   <td className="px-5 py-3">{p.ativo ? <span className="badge-green">Ativo</span> : <span className="badge-gray">Inativo</span>}</td>
-                  <td className="px-5 py-3"><div className="flex justify-end gap-1"><button className="btn-ghost !p-2" onClick={() => abrirEdicao(p)} aria-label={`Editar ${p.nome}`}><Pencil className="h-4 w-4" /></button>{p.ativo && <button className="btn-danger !py-1.5 !px-3 !text-xs" onClick={() => desativar(p)}>Desativar</button>}</div></td>
+                  <td className="px-5 py-3"><div className="flex justify-end gap-1"><button className="btn-ghost !p-2" onClick={() => abrirEdicao(p)} aria-label={`Editar ${p.nome}`}><Pencil className="h-4 w-4" /></button>{p.ativo ? <button className="btn-danger !py-1.5 !px-3 !text-xs" onClick={() => desativar(p)}>Desativar</button> : <button className="btn-outline !py-1.5 !px-3 !text-xs" onClick={() => reativar(p)}>Reativar</button>}</div></td>
                 </tr>
               ))}
             </tbody>

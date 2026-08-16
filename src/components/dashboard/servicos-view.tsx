@@ -29,7 +29,9 @@ export function ServicosView() {
   const carregar = useCallback(async () => {
     try {
       const res = await fetch("/api/servicos");
-      setServicos(await res.json());
+      const json = await res.json();
+      if (!res.ok || !Array.isArray(json)) throw new Error("Resposta inválida");
+      setServicos(json);
     } catch {
       toast("Erro ao carregar serviços", "erro");
     } finally {
@@ -97,15 +99,15 @@ export function ServicosView() {
 
   async function apagar(s: Servico) {
     const confirmado = await confirm({
-      title: "Apagar serviço?",
-      description: `Apagar o serviço "${s.nome}"?`,
-      confirmText: "Apagar",
+      title: "Arquivar serviço?",
+      description: `Arquivar o serviço "${s.nome}"? O histórico será preservado.`,
+      confirmText: "Arquivar",
       variant: "danger",
     });
     if (!confirmado) return;
     const res = await fetch(`/api/servicos/${s.id}`, { method: "DELETE" });
     if (res.ok) {
-      toast("Serviço apagado");
+      toast("Serviço arquivado");
       carregar();
     } else {
       toast("Não foi possível apagar", "erro");

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { ReagendarForm, ReagendarShell } from "@/components/reagendar/reagendar-form";
+import { hashToken } from "@/lib/tokens";
 
 export const dynamic = "force-dynamic";
 
@@ -18,9 +19,9 @@ function formatarData(d: Date): string {
 }
 
 async function getAgendamento(token: string) {
-  return prisma.agendamento.findUnique({
-    where: { tokenProposta: token },
-    include: { cliente: true, servico: true },
+  return prisma.propostaReagendamento.findUnique({
+    where: { tokenHash: hashToken(token) },
+    include: { agendamento: { include: { cliente: true, servico: true } } },
   });
 }
 
@@ -39,7 +40,7 @@ export default async function ReagendarPage({
     agendamento = null;
   }
 
-  if (!agendamento || !agendamento.novaDataHoraProposta) {
+  if (!agendamento) {
     return (
       <ReagendarShell>
         <p className="card card-pad text-center text-sm text-muted">
@@ -49,7 +50,7 @@ export default async function ReagendarPage({
     );
   }
 
-  if (agendamento.propostaStatus === "confirmada") {
+  if (agendamento.status === "confirmada") {
     return (
       <ReagendarShell>
         <div className="card card-pad text-center">
@@ -60,7 +61,7 @@ export default async function ReagendarPage({
           <p className="mt-4 text-sm text-muted">
             A tua marcação está agora para{" "}
             <span className="text-gold">
-              {formatarData(agendamento.dataHora)}
+              {formatarData(agendamento.novaDataHora)}
             </span>
             .
           </p>
@@ -69,7 +70,7 @@ export default async function ReagendarPage({
     );
   }
 
-  if (agendamento.propostaStatus === "recusada") {
+  if (agendamento.status === "recusada") {
     return (
       <ReagendarShell>
         <div className="card card-pad text-center">
@@ -80,7 +81,7 @@ export default async function ReagendarPage({
           <p className="mt-4 text-sm text-muted">
             Mantiveste o horário{" "}
             <span className="text-gold">
-              {formatarData(agendamento.dataHora)}
+              {formatarData(agendamento.dataHoraAtual)}
             </span>
             .
           </p>
@@ -90,17 +91,16 @@ export default async function ReagendarPage({
   }
 
   const expirada =
-    agendamento.propostaExpiraEm !== null &&
-    agendamento.propostaExpiraEm < new Date();
+    agendamento.expiraEm < new Date() || agendamento.status === "expirada";
 
   return (
     <ReagendarShell>
       <ReagendarForm
         token={token}
-        clienteNome={agendamento.cliente.nome}
-        servicoNome={agendamento.servico.nome}
-        horaAtual={formatarData(agendamento.dataHora)}
-        novaHora={formatarData(agendamento.novaDataHoraProposta)}
+        clienteNome={agendamento.agendamento.cliente.nome}
+        servicoNome={agendamento.agendamento.servico.nome}
+        horaAtual={formatarData(agendamento.dataHoraAtual)}
+        novaHora={formatarData(agendamento.novaDataHora)}
         expirada={expirada}
       />
     </ReagendarShell>

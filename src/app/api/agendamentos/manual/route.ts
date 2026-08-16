@@ -1,62 +1,32 @@
 import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
-import { combineDateAndTime } from "@/lib/horarios";
-import { slotLivre } from "@/lib/disponibilidade";
 import { agendamentoManualSchema } from "@/lib/validations";
-import { randomUUID } from "node:crypto";
+import { criarAgendamento } from "@/lib/agendamentos";
+import { DisponibilidadeError } from "@/lib/disponibilidade";
+import { apiError } from "@/lib/api";
 
 export async function POST(request: Request) {
-  if (!(await requireAuth())) {
-    return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-  }
-  const body = await request.json().catch(() => null);
-  const parsed = agendamentoManualSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json({ error: "Dados inválidos" }, { status: 400 });
-  }
-
-  const { clienteId, servicoId, profissionalId, data, hora, notas } = parsed.data;
-  const servico = await prisma.servico.findUnique({ where: { id: servicoId } });
-  if (!servico) {
-    return NextResponse.json({ error: "Serviço não encontrado" }, { status: 404 });
-  }
-
-  const profissionais = await prisma.profissional.findMany({ where: { ativo: true }, orderBy: [{ ordem: "asc" }, { nome: "asc" }] });
-  const candidatos = profissionalId ? profissionais.filter((p) => p.id === profissionalId) : profissionais;
-  if (profissionalId && candidatos.length === 0) {
-    return NextResponse.json({ error: "Profissional não encontrado" }, { status: 404 });
-  }
-  let profissional: (typeof candidatos)[number] | undefined = candidatos[0];
-  let livre = false;
-  if (candidatos.length > 0) {
-    profissional = undefined;
-    for (const candidato of candidatos) {
-      if (await slotLivre(data, hora, servico.duracaoMin, undefined, candidato.id)) {
-        profissional = candidato;
-        livre = true;
-        break;
-      }
+  if (!(await requireAuth())) return apiError("UNAUTHORIZED", "Não autorizado", 401);
+  const parsed = agendamentoManualSchema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) return apiError("VALIDATION_ERROR", "Dados inválidos", 422, parsed.error.issues);
+  const { override, overrideReason, ...data } = parsed.data;
+  try {
+    const result = await criarAgendamento({
+      ...data,
+      permitirExcecao: override,
+      motivoExcecao: overrideReason,
+      notificar: false,
+    });
+    return NextResponse.json({ agendamento: result.agendamento }, { status: 201 });
+  } catch (error) {
+    if (error instanceof DisponibilidadeError) {
+      return apiError(override ? error.code : "OVERRIDE_REQUIRED", error.message, 409);
     }
-  } else {
-    livre = await slotLivre(data, hora, servico.duracaoMin);
+    const known = error instanceof Error ? error.message : "";
+    if (["SERVICO_INATIVO", "CLIENTE_INATIVO", "SEM_PROFISSIONAIS"].includes(known)) {
+      return apiError(known, "Cliente, serviço ou profissional inválido/inativo", 409);
+    }
+    console.error("Erro ao criar marcação manual", error);
+    return apiError("INTERNAL_ERROR", "Não foi possível criar a marcação", 500);
   }
-  if (!livre) {
-    return NextResponse.json({ error: "Esta hora já está ocupada" }, { status: 409 });
-  }
-
-  const agendamento = await prisma.agendamento.create({
-    data: {
-      clienteId,
-      servicoId,
-      profissionalId: profissional?.id,
-      dataHora: combineDateAndTime(data, hora),
-      status: "agendado",
-      precoCobrado: servico.precoCents,
-      notas,
-      tokenGestao: randomUUID(),
-      tokenGestaoExpiraEm: new Date(Date.now() + 1000 * 60 * 60 * 24 * 90),
-    },
-  });
-  return NextResponse.json(agendamento, { status: 201 });
 }

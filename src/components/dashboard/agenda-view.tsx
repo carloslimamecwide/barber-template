@@ -8,6 +8,7 @@ import { toast, Toaster } from "@/components/ui/toaster";
 import { useConfirm } from "@/hooks/use-confirm";
 import { NovaMarcacaoDialog } from "@/components/dashboard/nova-marcacao-dialog";
 import { formatHora, formatPreco, toDateInputValue } from "@/lib/format";
+import { messageFromResponse } from "@/lib/http";
 
 type Agendamento = {
   id: string;
@@ -15,16 +16,16 @@ type Agendamento = {
   status: "agendado" | "concluido" | "cancelado" | "faltou";
   precoCobrado: number;
   nota?: string;
-  propostaStatus?: string | null;
-  novaDataHoraProposta?: string | null;
+  propostas: { id: string; novaDataHora: string }[];
+  notificacoes: { id: string; estado: string; tipo: string }[];
   cliente: { id: string; nome: string; telefone: string };
   servico: { id: string; nome: string; duracaoMin: number };
   profissional?: { id: string; nome: string } | null;
   serie?: { id: string } | null;
 };
 
-type Cliente = { id: string; nome: string };
-type Servico = { id: string; nome: string; duracaoMin: number };
+type Cliente = { id: string; nome: string; ativo: boolean };
+type Servico = { id: string; nome: string; duracaoMin: number; ativo: boolean };
 type Profissional = { id: string; nome: string; ativo: boolean };
 
 const STATUS: Record<string, { label: string; classe: string }> = {
@@ -65,6 +66,7 @@ export function AgendaView() {
       if (profissionalId) params.set("profissionalId", profissionalId);
       const res = await fetch(`/api/agendamentos?${params.toString()}`);
       const json = await res.json();
+      if (!res.ok || !Array.isArray(json)) throw new Error(messageFromResponse(json, "Erro ao carregar agenda"));
       setAgendamentos(json);
     } catch {
       toast("Erro ao carregar a agenda", "erro");
@@ -79,11 +81,11 @@ export function AgendaView() {
   }, [data, carregar]);
 
   useEffect(() => {
-    Promise.all([
-      fetch("/api/clientes").then((r) => r.json()),
-      fetch("/api/servicos").then((r) => r.json()),
-      fetch("/api/profissionais").then((r) => r.json()),
-    ])
+    Promise.all([fetch("/api/clientes"), fetch("/api/servicos"), fetch("/api/profissionais")])
+      .then(async (responses) => {
+        if (responses.some((response) => !response.ok)) throw new Error("Resposta inválida");
+        return Promise.all(responses.map((response) => response.json()));
+      })
       .then(([c, s, p]) => {
         setClientes(c);
         setServicos(s);
@@ -125,6 +127,12 @@ export function AgendaView() {
     }
   }
 
+  async function reenviarNotificacao(id: string) {
+    const res = await fetch(`/api/notificacoes/${id}/retry`, { method: "POST" });
+    toast(res.ok ? "Email colocado novamente em fila" : "Não foi possível reenviar", res.ok ? "sucesso" : "erro");
+    if (res.ok) carregar(data);
+  }
+
   function abrirHora(a: Agendamento, tipo: "editar" | "sugerir") {
     setAlvo(a);
     const d = new Date(a.dataHora);
@@ -133,7 +141,7 @@ export function AgendaView() {
     setModalHora({ tipo });
   }
 
-  async function guardarHora() {
+  async function guardarHora(override = false, overrideReason?: string) {
     if (!alvo || !horaData || !horaHora) return;
     setAEnviar(true);
     try {
@@ -144,16 +152,29 @@ export function AgendaView() {
       const res = await fetch(url, {
         method: modalHora?.tipo === "sugerir" ? "POST" : "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ data: horaData, hora: horaHora }),
+        body: JSON.stringify({ data: horaData, hora: horaHora, override, overrideReason }),
       });
       const json = await res.json();
       if (!res.ok) {
-        toast(json.error ?? "Não foi possível guardar", "erro");
+        const code = json?.error?.code;
+        if (code === "OVERRIDE_REQUIRED" && modalHora?.tipo === "editar") {
+          const confirmado = await confirm({
+            title: "Criar exceção ao horário?",
+            description: messageFromResponse(json, "A hora não cumpre as regras normais."),
+            confirmText: "Criar exceção",
+          });
+          if (confirmado) {
+            const motivo = window.prompt("Indica o motivo da exceção:")?.trim();
+            if (motivo) await guardarHora(true, motivo);
+          }
+          return;
+        }
+        toast(messageFromResponse(json, "Não foi possível guardar"), "erro");
         return;
       }
       toast(
         modalHora?.tipo === "sugerir"
-          ? "Email enviado ao cliente"
+          ? "Proposta criada; email em fila"
           : "Hora atualizada",
       );
       setModalHora(null);
@@ -249,10 +270,13 @@ export function AgendaView() {
                   <p className="text-sm text-muted">
                     {a.cliente.telefone} · {a.servico.nome}{a.profissional ? ` · ${a.profissional.nome}` : ""}
                   </p>
-                  {a.novaDataHoraProposta && (
+                  {a.propostas.length > 0 && (
                     <p className="mt-0.5 text-xs text-gold-soft">
                       Proposta de novo horário pendente
                     </p>
+                  )}
+                  {a.notificacoes[0]?.estado === "falhada" && (
+                    <button className="mt-0.5 text-xs text-red-400 underline" onClick={() => reenviarNotificacao(a.notificacoes[0].id)}>Email falhou — tentar novamente</button>
                   )}
                 </div>
                 <div className="flex items-center gap-2">
@@ -298,9 +322,9 @@ export function AgendaView() {
         open={nova}
         onClose={() => setNova(false)}
         onCriada={() => carregar(data)}
-        clientes={clientes}
-        servicos={servicos}
-        profissionais={profissionais}
+        clientes={clientes.filter((item) => item.ativo)}
+        servicos={servicos.filter((item) => item.ativo)}
+        profissionais={profissionais.filter((item) => item.ativo)}
       />
 
       <Dialog
@@ -360,7 +384,7 @@ export function AgendaView() {
             >
               Cancelar
             </button>
-            <button className="btn-gold" onClick={guardarHora} disabled={aEnviar}>
+            <button className="btn-gold" onClick={() => guardarHora()} disabled={aEnviar}>
               {aEnviar
                 ? "A guardar…"
                 : modalHora?.tipo === "sugerir"

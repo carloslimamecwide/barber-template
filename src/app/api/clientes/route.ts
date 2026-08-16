@@ -8,7 +8,7 @@ export async function GET() {
     return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   }
   const clientes = await prisma.cliente.findMany({
-    orderBy: { nome: "asc" },
+    orderBy: [{ ativo: "desc" }, { nome: "asc" }],
     include: { _count: { select: { agendamentos: true } } },
   });
   return NextResponse.json(clientes);
@@ -23,6 +23,7 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: "Dados inválidos" }, { status: 400 });
   }
-  const cliente = await prisma.cliente.create({ data: parsed.data });
+  const emailNormalizado = parsed.data.email?.trim().toLowerCase() || null;
+  const cliente = await prisma.cliente.create({ data: { ...parsed.data, email: emailNormalizado, emailNormalizado } });
   return NextResponse.json(cliente, { status: 201 });
 }

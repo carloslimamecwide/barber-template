@@ -6,6 +6,7 @@ import { Select } from "@/components/ui/select";
 import { toast } from "@/components/ui/toaster";
 import { DIAS_SEMANA, toDateInputValue } from "@/lib/format";
 import { diaDaSemana } from "@/lib/horarios";
+import { messageFromResponse } from "@/lib/http";
 
 type Cliente = { id: string; nome: string };
 type Servico = { id: string; nome: string; duracaoMin: number };
@@ -64,7 +65,7 @@ function NovaMarcacaoForm({
   const [diaSerie, setDiaSerie] = useState(() => diaDaSemana(toDateInputValue(new Date())));
   const [aEnviar, setAEnviar] = useState(false);
 
-  async function criar() {
+  async function criar(override = false, overrideReason?: string) {
     if (!clienteId || !servicoId || !data || !hora) {
       toast("Preenche todos os campos", "erro");
       return;
@@ -74,7 +75,7 @@ function NovaMarcacaoForm({
       const url = repetir ? "/api/series" : "/api/agendamentos/manual";
       const body = repetir
         ? { clienteId, servicoId, profissionalId: profissionalId || undefined, diaDaSemana: diaSerie, hora, intervaloSemanas, dataInicio: data }
-        : { clienteId, servicoId, profissionalId: profissionalId || undefined, data, hora, notas };
+        : { clienteId, servicoId, profissionalId: profissionalId || undefined, data, hora, notas, override, overrideReason };
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -82,7 +83,15 @@ function NovaMarcacaoForm({
       });
       const json = await res.json();
       if (!res.ok) {
-        toast(json.error ?? "Erro ao criar marcação", "erro");
+        if (json?.error?.code === "OVERRIDE_REQUIRED" && !repetir) {
+          const confirmado = window.confirm(`${messageFromResponse(json, "A hora não cumpre as regras normais.")}\n\nCriar uma exceção administrativa?`);
+          if (confirmado) {
+            const motivo = window.prompt("Indica o motivo da exceção:")?.trim();
+            if (motivo) await criar(true, motivo);
+          }
+          return;
+        }
+        toast(messageFromResponse(json, "Erro ao criar marcação"), "erro");
         return;
       }
       toast(repetir ? "Série recorrente criada" : "Marcação criada");
@@ -218,7 +227,7 @@ function NovaMarcacaoForm({
           <button className="btn-outline" onClick={onClose}>
             Cancelar
           </button>
-          <button className="btn-gold" onClick={criar} disabled={aEnviar}>
+          <button className="btn-gold" onClick={() => criar()} disabled={aEnviar}>
             {aEnviar ? "A criar…" : "Criar marcação"}
           </button>
         </div>

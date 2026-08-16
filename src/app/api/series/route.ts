@@ -16,9 +16,13 @@ export async function POST(request: Request) {
   }
   const { clienteId, servicoId, profissionalId, diaDaSemana, hora, intervaloSemanas, dataInicio } = parsed.data;
 
-  const servico = await prisma.servico.findUnique({ where: { id: servicoId } });
-  if (!servico) {
-    return NextResponse.json({ error: "Serviço não encontrado" }, { status: 404 });
+  const [servico, cliente, profissional] = await Promise.all([
+    prisma.servico.findUnique({ where: { id: servicoId } }),
+    prisma.cliente.findUnique({ where: { id: clienteId } }),
+    profissionalId ? prisma.profissional.findUnique({ where: { id: profissionalId } }) : Promise.resolve(null),
+  ]);
+  if (!servico?.ativo || !cliente?.ativo || (profissionalId && !profissional?.ativo)) {
+    return NextResponse.json({ error: "Cliente, serviço ou profissional inválido/inativo" }, { status: 409 });
   }
 
   const serie = await prisma.serieRecorrente.create({
@@ -33,8 +37,8 @@ export async function POST(request: Request) {
     },
   });
 
-  const { criadas } = await gerarOcorrenciasSerie(serie.id);
-  return NextResponse.json({ serie, criadas }, { status: 201 });
+  const { criadas, excecoes } = await gerarOcorrenciasSerie(serie.id);
+  return NextResponse.json({ serie, criadas, excecoes }, { status: 201 });
 }
 
 export async function GET() {
@@ -53,6 +57,11 @@ export async function GET() {
         select: { id: true, dataHora: true, status: true },
         orderBy: { dataHora: "asc" },
         take: 100,
+      },
+      excecoes: {
+        where: { resolvidaEm: null },
+        select: { id: true, dataHora: true, motivo: true },
+        orderBy: { dataHora: "asc" },
       },
     },
     orderBy: { criadaEm: "desc" },

@@ -27,7 +27,9 @@ export function EstatisticasView() {
   const carregar = useCallback(async (m: string) => {
     try {
       const res = await fetch(`/api/estatisticas?mes=${m}`);
-      setDados(await res.json());
+      const json = await res.json();
+      if (!res.ok || !json?.porServico) throw new Error("Resposta inválida");
+      setDados(json);
     } catch {
       toast("Erro ao carregar estatísticas", "erro");
     } finally {

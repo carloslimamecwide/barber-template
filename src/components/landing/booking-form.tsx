@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { toast } from "@/components/ui/toaster";
 import { Select } from "@/components/ui/select";
 import { toDateInputValue } from "@/lib/format";
+import { messageFromResponse } from "@/lib/http";
 
 type Servico = {
   id: string;
@@ -28,6 +29,7 @@ export function BookingForm({ servicos }: { servicos: Servico[] }) {
   const [telefone, setTelefone] = useState("");
   const [email, setEmail] = useState("");
   const [aEnviar, setAEnviar] = useState(false);
+  const pedidoSlots = useRef(0);
   const [confirmado, setConfirmado] = useState<{
     nome: string;
     servico: string;
@@ -39,23 +41,26 @@ export function BookingForm({ servicos }: { servicos: Servico[] }) {
   const servicoEscolhido = servicos.find((s) => s.id === servicoId);
   const preco = servicoEscolhido ? servicoEscolhido.precoCents / 100 : 0;
 
-  async function carregarSlots(d: string, profissionalSelecionado = profissionalId) {
-    if (!servicoId || !d) return;
+  async function carregarSlots(d: string, profissionalSelecionado = profissionalId, servicoSelecionado = servicoId) {
+    if (!servicoSelecionado || !d) return;
+    const pedido = ++pedidoSlots.current;
     setCarregandoSlots(true);
     setHora("");
     try {
-      const params = new URLSearchParams({ data: d, servicoId });
+      const params = new URLSearchParams({ data: d, servicoId: servicoSelecionado });
       if (profissionalSelecionado) params.set("profissionalId", profissionalSelecionado);
       const res = await fetch(`/api/agendamentos/disponiveis?${params.toString()}`);
       const json = await res.json();
+      if (pedido !== pedidoSlots.current) return;
+      if (!res.ok) throw new Error(messageFromResponse(json, "Erro ao carregar horários"));
       setSlots(json.slots ?? []);
       setHorario(json.horario ?? { aberto: true });
       setProfissionais(json.profissionais ?? []);
     } catch {
-      toast("Erro ao carregar as horas disponíveis", "erro");
+      if (pedido === pedidoSlots.current) toast("Erro ao carregar as horas disponíveis", "erro");
       setSlots([]);
     } finally {
-      setCarregandoSlots(false);
+      if (pedido === pedidoSlots.current) setCarregandoSlots(false);
     }
   }
 
@@ -79,7 +84,7 @@ export function BookingForm({ servicos }: { servicos: Servico[] }) {
       });
       const json = await res.json();
       if (!res.ok) {
-        toast(json.error ?? "Não foi possível marcar", "erro");
+        toast(messageFromResponse(json, "Não foi possível marcar"), "erro");
         if (res.status === 409) {
           await carregarSlots(data);
         }
@@ -88,10 +93,10 @@ export function BookingForm({ servicos }: { servicos: Servico[] }) {
       setConfirmado({
         nome,
         servico: servicoEscolhido?.nome ?? "",
-        dataHora: json.dataHora,
+        dataHora: json.agendamento.dataHora,
         precoCents: servicoEscolhido?.precoCents ?? 0,
       });
-      toast("Marcação confirmada! Enviámos o email.");
+      toast("Marcação confirmada. O email ficou em fila para envio.");
       setServicoId("");
       setProfissionalId("");
       setData("");
@@ -154,7 +159,7 @@ export function BookingForm({ servicos }: { servicos: Servico[] }) {
             setServicoId(valor);
             setSlots([]);
             setHora("");
-            if (valor && data) carregarSlots(data);
+            if (valor && data) carregarSlots(data, profissionalId, valor);
           }}
         >
           <option value="">Escolhe um serviço</option>

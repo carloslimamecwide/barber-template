@@ -1,47 +1,43 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { gerarSlots } from "@/lib/horarios";
-import { obterHorarioDoDia, obterOcupacoesDoDia } from "@/lib/disponibilidade";
+import { obterHorarioDoDia, slotsDoProfissional } from "@/lib/disponibilidade";
+import { dataStringSchema } from "@/lib/validations";
+import { apiError } from "@/lib/api";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const data = searchParams.get("data");
   const servicoId = searchParams.get("servicoId");
   const profissionalId = searchParams.get("profissionalId") || undefined;
-
-  if (!data || !servicoId) {
-    return NextResponse.json(
-      { error: "Parâmetros data e servicoId obrigatórios" },
-      { status: 400 },
-    );
+  if (!data || !servicoId || !dataStringSchema.safeParse(data).success) {
+    return apiError("VALIDATION_ERROR", "Data e serviço válidos são obrigatórios", 422);
   }
-
-  const servico = await prisma.servico.findUnique({ where: { id: servicoId } });
-  if (!servico || !servico.ativo) {
-    return NextResponse.json({ error: "Serviço não encontrado" }, { status: 404 });
-  }
-
-  const [horario, profissionais] = await Promise.all([
+  const [servico, profissionais, horario] = await Promise.all([
+    prisma.servico.findUnique({ where: { id: servicoId } }),
+    prisma.profissional.findMany({
+      where: { ativo: true, ...(profissionalId ? { id: profissionalId } : {}) },
+      orderBy: [{ ordem: "asc" }, { nome: "asc" }],
+    }),
     obterHorarioDoDia(data),
-    prisma.profissional.findMany({ where: { ativo: true }, orderBy: [{ ordem: "asc" }, { nome: "asc" }] }),
   ]);
+  if (!servico?.ativo) return apiError("SERVICO_INATIVO", "Serviço não encontrado", 404);
+  if (!profissionais.length) return NextResponse.json({ horario, slots: [], profissionais: [], configuracaoPendente: true });
 
-  if (!horario.aberto) {
-    return NextResponse.json({ horario: horario, slots: [] });
-  }
-
-  const ids: (string | undefined)[] = profissionalId
-    ? [profissionalId]
-    : profissionais.length > 0
-      ? profissionais.map((p) => p.id)
-      : [undefined];
-  const slotsPorProfissional = await Promise.all(ids.map(async (id) => gerarSlots({
-    data,
-    duracaoMin: servico.duracaoMin,
-    horario,
-    ocupacoes: await obterOcupacoesDoDia(data, undefined, id),
+  const porProfissional = await Promise.all(profissionais.map(async (profissional) => ({
+    profissional,
+    slots: await slotsDoProfissional({ data, duracaoMin: servico.duracaoMin, profissionalId: profissional.id }),
   })));
-  const slots = [...new Set(slotsPorProfissional.flat())].sort();
-
-  return NextResponse.json({ horario, slots, profissionais });
+  const mapa = new Map<string, { id: string; nome: string }[]>();
+  for (const item of porProfissional) {
+    for (const hora of item.slots) {
+      mapa.set(hora, [...(mapa.get(hora) ?? []), { id: item.profissional.id, nome: item.profissional.nome }]);
+    }
+  }
+  const detalhes = [...mapa.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([hora, disponiveis]) => ({ hora, profissionais: disponiveis }));
+  return NextResponse.json({
+    horario,
+    slots: detalhes.map((s) => s.hora),
+    detalhes,
+    profissionais: profissionais.map(({ id, nome }) => ({ id, nome })),
+  });
 }

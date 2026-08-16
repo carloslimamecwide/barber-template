@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { dateOnlyToDate } from "@/lib/horarios";
+import { combineDateAndTime, dateOnlyToDate } from "@/lib/horarios";
 import { diaFechadoSchema } from "@/lib/validations";
 
 export async function GET() {
@@ -28,5 +28,12 @@ export async function POST(request: Request) {
     update: { motivo: parsed.data.motivo },
     create: { data: dateOnlyToDate(parsed.data.data), motivo: parsed.data.motivo },
   });
-  return NextResponse.json(dia, { status: 201 });
+  const afetadas = await prisma.agendamento.count({
+    where: {
+      dataHora: { gte: combineDateAndTime(parsed.data.data, "00:00"), lte: combineDateAndTime(parsed.data.data, "23:59") },
+      status: "agendado",
+      arquivadoEm: null,
+    },
+  });
+  return NextResponse.json({ dia, afetadas }, { status: 201 });
 }

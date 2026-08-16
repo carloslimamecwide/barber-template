@@ -1,71 +1,53 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { slotLivre } from "@/lib/disponibilidade";
+import { DisponibilidadeError, validarSlot } from "@/lib/disponibilidade";
+import { hashToken } from "@/lib/tokens";
+import { toDateOnlyString } from "@/lib/horarios";
+import { apiError } from "@/lib/api";
+import { transacaoSerializavel } from "@/lib/transactions";
 
-export async function POST(
-  request: Request,
-  ctx: { params: Promise<{ id: string }> },
-) {
+export async function POST(request: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id: token } = await ctx.params;
   const body = await request.json().catch(() => null);
-  const decisao = body?.decisao;
-
-  if (decisao !== "confirmar" && decisao !== "recusar") {
-    return NextResponse.json({ error: "Decisão inválida" }, { status: 400 });
+  if (body?.decisao !== "confirmar" && body?.decisao !== "recusar") {
+    return apiError("VALIDATION_ERROR", "Decisão inválida", 422);
   }
-
-  const agendamento = await prisma.agendamento.findUnique({
-    where: { tokenProposta: token },
-    include: { servico: true },
-  });
-  if (!agendamento || !agendamento.novaDataHoraProposta) {
-    return NextResponse.json({ error: "Proposta não encontrada" }, { status: 404 });
-  }
-  if (agendamento.propostaStatus === "confirmada") {
-    return NextResponse.json({ error: "Esta proposta já foi confirmada" }, { status: 409 });
-  }
-  if (agendamento.propostaStatus === "recusada") {
-    return NextResponse.json({ error: "Esta proposta já foi recusada" }, { status: 409 });
-  }
-  if (agendamento.propostaExpiraEm && agendamento.propostaExpiraEm < new Date()) {
-    return NextResponse.json({ error: "Esta proposta expirou" }, { status: 410 });
-  }
-
-  if (decisao === "recusar") {
-    const updated = await prisma.agendamento.update({
-      where: { id: agendamento.id },
-      data: {
-        novaDataHoraProposta: null,
-        tokenProposta: null,
-        propostaStatus: "recusada",
-        propostaExpiraEm: null,
-      },
+  try {
+    const resultado = await transacaoSerializavel(async (tx) => {
+      const proposta = await tx.propostaReagendamento.findUnique({
+        where: { tokenHash: hashToken(token) }, include: { agendamento: true },
+      });
+      if (!proposta) throw new Error("NOT_FOUND");
+      if (proposta.status !== "pendente") return proposta.status === "confirmada" ? "confirmado" : "recusado";
+      if (proposta.expiraEm < new Date()) {
+        await tx.propostaReagendamento.update({ where: { id: proposta.id }, data: { status: "expirada" } });
+        throw new Error("EXPIRED");
+      }
+      if (proposta.agendamento.status !== "agendado" || proposta.agendamento.dataHora <= new Date()) throw new Error("INVALID_STATE");
+      if (body.decisao === "recusar") {
+        await tx.propostaReagendamento.update({
+          where: { id: proposta.id }, data: { status: "recusada", respondidaEm: new Date() },
+        });
+        return "recusado";
+      }
+      const data = toDateOnlyString(proposta.novaDataHora);
+      const hora = new Intl.DateTimeFormat("pt-PT", { timeZone: "Europe/Lisbon", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(proposta.novaDataHora);
+      await validarSlot({
+        data, hora, duracaoMin: proposta.agendamento.duracaoAgendadaMin,
+        profissionalId: proposta.agendamento.profissionalId,
+        excluirId: proposta.agendamentoId, db: tx,
+      });
+      await tx.agendamento.update({ where: { id: proposta.agendamentoId }, data: { dataHora: proposta.novaDataHora } });
+      await tx.propostaReagendamento.update({ where: { id: proposta.id }, data: { status: "confirmada", respondidaEm: new Date() } });
+      return "confirmado";
     });
-    return NextResponse.json({ ok: true, resultado: "recusado", agendamento: updated });
+    return NextResponse.json({ ok: true, resultado });
+  } catch (error) {
+    if (error instanceof DisponibilidadeError) return apiError(error.code, "Esta hora já não está disponível", 409);
+    const code = error instanceof Error ? error.message : "";
+    if (code === "NOT_FOUND") return apiError("NOT_FOUND", "Proposta não encontrada", 404);
+    if (code === "EXPIRED") return apiError("EXPIRED", "Esta proposta expirou", 410);
+    if (code === "INVALID_STATE") return apiError("INVALID_STATE", "A marcação já não pode ser alterada", 409);
+    console.error("Erro ao responder proposta", error);
+    return apiError("INTERNAL_ERROR", "Não foi possível responder", 500);
   }
-
-  const data = agendamento.novaDataHoraProposta;
-  const dia = `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, "0")}-${String(data.getDate()).padStart(2, "0")}`;
-  const hora = `${String(data.getHours()).padStart(2, "0")}:${String(data.getMinutes()).padStart(2, "0")}`;
-
-  const livre = await slotLivre(dia, hora, agendamento.servico.duracaoMin, agendamento.id, agendamento.profissionalId ?? undefined);
-  if (!livre) {
-    return NextResponse.json(
-      { error: "Esta hora já foi ocupada entretanto" },
-      { status: 409 },
-    );
-  }
-
-  const updated = await prisma.agendamento.update({
-    where: { id: agendamento.id },
-    data: {
-      dataHora: agendamento.novaDataHoraProposta,
-      novaDataHoraProposta: null,
-      tokenProposta: null,
-      propostaStatus: "confirmada",
-      propostaExpiraEm: null,
-    },
-  });
-
-  return NextResponse.json({ ok: true, resultado: "confirmado", agendamento: updated });
 }

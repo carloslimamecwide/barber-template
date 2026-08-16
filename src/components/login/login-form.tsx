@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Scissors } from "lucide-react";
+import { messageFromResponse } from "@/lib/http";
 
 export function LoginForm() {
   const router = useRouter();
@@ -24,7 +25,7 @@ export function LoginForm() {
       });
       if (!res.ok) {
         const json = await res.json().catch(() => null);
-        setErro(json?.error ?? "Erro ao entrar");
+        setErro(messageFromResponse(json, "Erro ao entrar"));
         return;
       }
       router.push("/dashboard");

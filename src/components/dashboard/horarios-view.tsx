@@ -32,10 +32,9 @@ export function HorariosView() {
 
   const carregar = useCallback(async () => {
     try {
-      const [h, d] = await Promise.all([
-        fetch("/api/horarios").then((r) => r.json()),
-        fetch("/api/dias-fechados").then((r) => r.json()),
-      ]);
+      const [hr, dr] = await Promise.all([fetch("/api/horarios"), fetch("/api/dias-fechados")]);
+      if (!hr.ok || !dr.ok) throw new Error("Resposta inválida");
+      const [h, d] = await Promise.all([hr.json(), dr.json()]);
       setHorarios(h);
       setDias(d);
     } catch {
@@ -75,7 +74,8 @@ export function HorariosView() {
         toast("Erro ao guardar horários", "erro");
         return;
       }
-      toast("Horário guardado");
+      const json = await res.json();
+      toast(json.afetadas ? `Horário guardado; ${json.afetadas} marcação(ões) precisam de revisão` : "Horário guardado");
     } catch {
       toast("Erro de ligação", "erro");
     }
@@ -96,7 +96,8 @@ export function HorariosView() {
         toast("Erro ao adicionar dia fechado", "erro");
         return;
       }
-      toast("Dia fechado adicionado");
+      const json = await res.json();
+      toast(json.afetadas ? `Dia fechado adicionado; ${json.afetadas} marcação(ões) precisam de revisão` : "Dia fechado adicionado");
       setNovaData("");
       setNovoMotivo("");
       carregar();

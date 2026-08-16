@@ -4,12 +4,16 @@ import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { LogoutButton } from "@/components/dashboard/logout-button";
 import { SidebarNav } from "@/components/dashboard/sidebar-nav";
+import { redirect } from "next/navigation";
+import { requireAuth } from "@/lib/auth";
 
 export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const auth = await requireAuth();
+  if (!auth) redirect("/login");
   const session = await getSession();
   const bloqueadas = await prisma.serieRecorrente.count({
     where: { estado: "bloqueada" },

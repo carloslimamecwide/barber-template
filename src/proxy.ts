@@ -11,7 +11,7 @@ export default async function proxy(req: NextRequest) {
   const res = new NextResponse();
   const session = await getIronSession<SessionData>(req, res, sessionOptions);
 
-  if (!session.email) {
+  if (!session.userId) {
     return NextResponse.redirect(new URL("/login", req.nextUrl));
   }
 

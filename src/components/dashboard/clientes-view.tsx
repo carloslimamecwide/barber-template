@@ -15,6 +15,7 @@ type Cliente = {
   notas: string | null;
   createdAt: string;
   _count: { agendamentos: number };
+  ativo: boolean;
 };
 
 const VAZIO = { nome: "", telefone: "", email: "", notas: "" };
@@ -31,7 +32,9 @@ export function ClientesView() {
   const carregar = useCallback(async () => {
     try {
       const res = await fetch("/api/clientes");
-      setClientes(await res.json());
+      const json = await res.json();
+      if (!res.ok || !Array.isArray(json)) throw new Error("Resposta inválida");
+      setClientes(json);
     } catch {
       toast("Erro ao carregar clientes", "erro");
     } finally {
@@ -93,15 +96,15 @@ export function ClientesView() {
 
   async function apagar(c: Cliente) {
     const confirmado = await confirm({
-      title: "Apagar cliente?",
-      description: `Apagar ${c.nome}? As marcações associadas também serão apagadas.`,
-      confirmText: "Apagar",
+      title: "Arquivar cliente?",
+      description: `Arquivar ${c.nome}? O histórico de marcações será preservado.`,
+      confirmText: "Arquivar",
       variant: "danger",
     });
     if (!confirmado) return;
     const res = await fetch(`/api/clientes/${c.id}`, { method: "DELETE" });
     if (res.ok) {
-      toast("Cliente apagado");
+      toast("Cliente arquivado");
       carregar();
     } else {
       toast("Não foi possível apagar", "erro");
@@ -143,7 +146,7 @@ export function ClientesView() {
             <tbody className="divide-y divide-line">
               {clientes.map((c) => (
                 <tr key={c.id} className="hover:bg-surface2/60">
-                  <td className="px-5 py-3 font-semibold text-ink">{c.nome}</td>
+                  <td className="px-5 py-3 font-semibold text-ink">{c.nome}{!c.ativo && <span className="badge-gray ml-2">Arquivado</span>}</td>
                   <td className="px-5 py-3 text-muted">{c.telefone}</td>
                   <td className="hidden px-5 py-3 text-muted sm:table-cell">
                     {c.email ?? "—"}
